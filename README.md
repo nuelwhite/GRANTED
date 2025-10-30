@@ -201,3 +201,25 @@ Contents:
               - Extraction Log Sheet
               - Quality Metrics Sheet
               - Final CSV on Drive
+
+
+## Project Structure
+
+```markdown
+/semi-auto-sys/
+│
+├── extract_grants.py
+├── transform_validate.py
+├── load_and_notify.py
+│
+├── utils/
+│   ├── drive_uploader.py          # Uploads folder/files to Google Drive
+│   ├── doc_uploader.py            # Creates/updates Google Docs for questions
+│   ├── sheets_logger.py           # Pushes extraction + quality metrics
+│   └── email_notifier.py          # Sends completion summary email
+│
+└── config/
+    ├── credentials.json           # Google API creds
+    ├── drive_folders.yaml         # Folder IDs for raw_data, clean_data, etc.
+    └── email_recipients.yaml
+```
