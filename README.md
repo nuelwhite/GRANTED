@@ -1,51 +1,50 @@
-🧩 GRANTED Semi-Automated Grant Data Pipeline
+# GRANTED Semi-Automated Grant Data Pipeline
 
-Owner: Grant Data Operations Manager
-Version: v1.0
-Last Updated: October 2025
+**Created By**: Grant Data Operations Manager
 
-1. Overview
+**Version**: v1.0
+
+**Last Updated**: October 2025
+
+## Overview
 
 This document outlines the design and operation of GRANTED’s Semi-Automated Grant Data Pipeline.
-The pipeline aims to automate the collection, validation, and delivery of public grant data from verified sources into a structured format that powers GRANTED’s grant database.
+The pipeline aims to automate the collection, validation, and delivery of grant data from verified sources into a structured format that powers GRANTED’s grant database.
 
 The system currently uses:
 
-Gemini API for AI-assisted data extraction
+- Gemini API for AI-assisted data extraction
 
-Python + Pydantic for data validation and transformation
+- Python + Pydantic for data validation and transformation
 
-Google Sheets API for logging and metrics tracking
+- Google Sheets API for logging and metrics tracking
 
-Google Drive API for data delivery
+- Google Drive API for data delivery
 
-Cron jobs for basic orchestration
+- Cron jobs for basic orchestration
 
-Email notifications for completion alerts
+- Email notifications for completion alerts
 
-2. Objectives
+## Objectives
 
-Automate data extraction from predefined grant source URLs
+- Automate data extraction from predefined grant source URLs
 
-Ensure data consistency and completeness against a defined schema
+- Ensure data consistency and completeness against a defined schema
 
-Track and visualize data quality and pipeline performance metrics
+- Track and visualize data quality and pipeline performance metrics
 
-Store validated data in a centralized, accessible location (Google Drive)
+- Store validated data in a centralized, accessible location (Google Drive)
 
-Provide a scalable foundation for future integration with tools like Looker Studio and Great Expectations
+- Provide a scalable foundation for future integration with tools like Looker Studio and Great Expectations
 
-3. Architecture Diagram
-
-(To be drawn)
-I can generate this for you visually — but conceptually:
-
+## Architecture Diagram
+```
 [Scheduled Cron Job]
        │
        ▼
 [Gemini API Extractor]
        │
-  (Raw JSON/CSV)
+  (Raw CSV)
        ▼
 [Transformation + Validation Layer]
  (Python + Pydantic)
@@ -56,100 +55,99 @@ I can generate this for you visually — but conceptually:
   │
   ▼
 [Validated Clean Data]
- (Local / Cloud Folder)
        │
        ▼
 [Google Drive Upload (API)]
        │
        ▼
 [Email Notification → Team]
+```
 
-4. Pipeline Stages
-Stage 1: Extraction
+## Pipeline Stages
 
-Goal: Retrieve raw structured data from public grant sources.
+### Stage 1: Extraction
 
-Process:
+**Goal**: Retrieve raw structured data from public grant sources.
 
-Cron job triggers the extraction script.
+**Process**:
 
-Gemini API scrapes data from URLs defined in sources_list.json.
+- Cron job triggers the extraction script.
 
-Extracted data is stored as raw CSV or JSON files in /data/raw/.
+- Gemini API scrapes data from URLs defined in sources_list.
 
-Extraction metadata (timestamp, source, records, status) is logged to Google Sheet: “Extraction Log”.
+- Extracted data is stored as raw CSV or JSON files in /data/raw/.
 
-Deliverables:
+- Extraction metadata (timestamp, source, records, status) is logged to Google Sheet: “Extraction Log”.
 
-/data/raw/{source_name}_{date}.csv
+**Deliverables**:
 
-Extraction log entry in Google Sheet
+- /data/raw/{source_name}_{date}.csv
 
-Stage 2: Transformation & Validation
+- Extraction log entry in Google Sheet
 
-Goal: Clean and validate raw data against the predefined schema.
+### Stage 2: Transformation & Validation
 
-Tools: Python, Pandas, Pydantic
+**Goal**: Clean and validate raw data against the predefined schema.
 
-Process:
+**Tools**: Python, Pandas, Pydantic
 
-Load raw data file into a Pandas DataFrame.
+**Process**:
 
-Apply schema validation using Pydantic models (checking for required fields, data types, and formatting).
+- Load raw data file into a Pandas DataFrame.
 
-Flag or drop incomplete or invalid rows.
+- Apply schema validation using Pydantic models (checking for required fields, data types, and formatting).
 
-Standardize key fields:
+- Flag or drop incomplete or invalid rows.
 
-Dates → ISO 8601 (YYYY-MM-DD)
+**Standardize key fields:**
 
-Currency → Standardized to USD or CAD (depending on rules)
+- Dates → ISO 8601 (YYYY-MM-DD)
 
-Funder names → Title case, trimmed
+- Currency → Standardized to USD or CAD (depending on rules)
 
-Compute data quality metrics (e.g., percentage completeness per column).
+- Funder names → Title case, trimmed
 
-Append metrics to Google Sheet: “Data Quality Metrics”.
+- Compute data quality metrics (e.g., percentage completeness per column).
 
-Deliverables:
+- Append metrics to Google Sheet: “Data Quality Metrics”.
 
-/data/clean/{source_name}_{date}_validated.csv
+**Deliverables**:
 
-Updated metrics dashboard in Google Sheets
+- /data/clean/{source_name}_{date}_validated.csv
 
-Stage 3: Load
+- Updated metrics dashboard in Google Sheets
 
-Goal: Save validated data for downstream use and visibility.
+### Stage 3: Load
 
-Process:
+**Goal**: Save validated data for downstream use and visibility.
 
-Upload validated CSV file to a dedicated Google Drive folder /Final Data/{YYYY-MM-DD}/.
+**Process**:
 
-Add metadata (source, timestamp, record count, completeness score).
+- Upload validated CSV file to a dedicated Google Drive folder /Final Data/{YYYY-MM-DD}/.
 
-Send automated email notification to the data operations mailing list summarizing:
+- Add metadata (source, timestamp, record count, completeness score).
 
-Source processed
+- Send automated email notification to the data operations mailing list summarizing:
+       
+       * Source processed
+       * Records count
+       * Completeness score
+       * Link to Drive file
 
-Records count
+### Stage 4: Monitoring & Reporting
 
-Completeness score
+**Goal**: Provide visibility into pipeline performance and data quality.
 
-Link to Drive file
+**Implementation**:
 
-Stage 4: Monitoring & Reporting
+- Google Sheet Dashboards: Interactive summary of extraction logs and quality metrics.
 
-Goal: Provide visibility into pipeline performance and data quality.
+- Looker Studio (Future Phase): Connect to Google Sheets for visual analytics (data completeness, error rates, timeliness).
 
-Implementation:
+- Weekly Summary (Future Phase): Automated weekly email summary of pipeline performance metrics.
 
-Google Sheet Dashboards: Interactive summary of extraction logs and quality metrics.
-
-Looker Studio (Optional): Connect to Google Sheets for visual analytics (data completeness, error rates, timeliness).
-
-Weekly Summary (Future Phase): Automated weekly email summary of pipeline performance metrics.
-
-5. Schema Reference
+## Schema Reference
+```
 Field Name	Description	Required	Example
 grant_id	Unique identifier	✅	GRT2025_001
 title	Grant title	✅	Women in Tech Innovation Grant
@@ -163,31 +161,31 @@ eligible_provinces	Geographic eligibility		Ontario; Quebec
 eligible_applicant_type	Applicant type		Small Business
 target_beneficiaries	Beneficiary group		Women-Owned Businesses
 application_url	Application link	✅	https://example.com/apply
-6. Scheduling
+
+```
+
+## Scheduling
+
+```
 Task	Frequency	Method
 Data Extraction	Daily	Cron (0 6 * * *)
 Transformation & Validation	After extraction	Script trigger
 Google Drive Upload	After validation	Script trigger
 Email Notification	On completion	SMTP/Google Mail API
-7. Notifications
+```
 
-Recipients: Grant Data Ops team (can expand later).
+## Notifications
+
+Recipients: Grant Data Ops team.
+
 Contents:
 
-Batch ID
-
-Source name
-
-Records processed
-
-Completeness score
-
-Errors detected
-
-Links to:
-
-Extraction Log Sheet
-
-Quality Metrics Sheet
-
-Final CSV on Drive
+       - Batch ID
+       -  Source name
+       - Records processed
+       - Completeness score
+       - Errors detected
+       - Links to:
+              - Extraction Log Sheet
+              - Quality Metrics Sheet
+              - Final CSV on Drive
