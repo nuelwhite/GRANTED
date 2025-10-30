@@ -147,26 +147,27 @@ The system currently uses:
 - Weekly Summary (Future Phase): Automated weekly email summary of pipeline performance metrics.
 
 ## Schema Reference
-```
-Field Name	Description	Required	Example
-grant_id	Unique identifier	✅	GRT2025_001
-title	Grant title	✅	Women in Tech Innovation Grant
-funder	Funding organization	✅	Government of Canada
-funding_type	Category of funding	✅	Grant
-amount_min	Minimum amount		10000
-amount_max	Maximum amount		50000
-currency	Currency code	✅	CAD
-deadline	Application deadline	✅	2025-12-31
-eligible_provinces	Geographic eligibility		Ontario; Quebec
-eligible_applicant_type	Applicant type		Small Business
-target_beneficiaries	Beneficiary group		Women-Owned Businesses
-application_url	Application link	✅	https://example.com/apply
 
-```
+| Field Name | Description | Required | Example |
+|---|---|---|---|
+| grant_id | Unique identifier | ✅	| GRT2025_001 |
+| title | Grant title |✅ | Women in Tech Innovation Grant |
+| funder | Funding organization | ✅ |	Government of Canada |
+| funding_type | Category of funding | ✅ | Grant |
+| amount_min	| Minimum amount | | 10000 |
+| amount_max	| Maximum amount | | 50000|
+| currency | Currency | ✅ | CAD |
+| deadline | Application deadline | ✅ | 2025-12-31 |
+| eligible_provinces | Geographic eligibility |    | Ontario; Quebec |
+eligible_applicant_type | Applicant type | | Small Business|
+| target_beneficiaries | Beneficiary group | | Women-Owned Businesses
+application_url | Application link | ✅ | https://example.com/apply|
+
+
 
 ## Scheduling
 
-```
+
 Task	Frequency	Method
 Data Extraction	Daily	Cron (0 6 * * *)
 Transformation & Validation	After extraction	Script trigger
