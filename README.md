@@ -41,6 +41,8 @@ The system currently uses:
 ```
 [Scheduled Cron Job]
        │
+       │
+       ├── Extraction Logs ─────────────────► [Extraction Log]
        ▼
 [Gemini API Extractor]
        │
@@ -49,11 +51,10 @@ The system currently uses:
 [Transformation + Validation Layer]
  (Python + Pydantic)
        │
-  ├── Completeness & Quality Metrics ───► [Google Sheet: Metrics Dashboard]
-  │
-  ├── Extraction Logs ─────────────────► [Google Sheet: Extraction Log]
-  │
-  ▼
+       ├── Completeness & Quality Metrics ───► [Google Sheet: Metrics Dashboard]
+       │
+       │
+       ▼
 [Validated Clean Data]
        │
        ▼
@@ -71,19 +72,20 @@ The system currently uses:
 
 **Process**:
 
-- Cron job triggers the extraction script.
+- Cron job triggers the extraction script `extract_grants.py`.
 
-- Gemini API scrapes data from URLs defined in sources_list.
+- Gemini API scrapes data from URLs defined in `sources_list.json`.
 
-- Extracted data is stored as raw CSV or JSON files in /data/raw/.
+- Extracted data is stored as raw CSV or JSON files in `/data/raw/{source}_{date}.csv`.
 
-- Extraction metadata (timestamp, source, records, status) is logged to Google Sheet: “Extraction Log”.
+- Extraction metadata (timestamp, source, records, status) is logged to “Extraction Log”.
+
 
 **Deliverables**:
 
 - /data/raw/{source_name}_{date}.csv
 
-- Extraction log entry in Google Sheet
+- Extraction log entry
 
 ### Stage 2: Transformation & Validation
 
@@ -99,17 +101,18 @@ The system currently uses:
 
 - Flag or drop incomplete or invalid rows.
 
+- Compute data quality metrics (e.g., percentage completeness per column).
+
+- Append metrics to Google Sheet: “Data Quality Metrics”.
+
 **Standardize key fields:**
 
-- Dates → ISO 8601 (YYYY-MM-DD)
+- Dates → (YYYY-MM-DD)
 
 - Currency → Standardized to USD or CAD (depending on rules)
 
 - Funder names → Title case, trimmed
 
-- Compute data quality metrics (e.g., percentage completeness per column).
-
-- Append metrics to Google Sheet: “Data Quality Metrics”.
 
 **Deliverables**:
 
@@ -122,6 +125,18 @@ The system currently uses:
 **Goal**: Save validated data for downstream use and visibility.
 
 **Process**:
+
+For each grant: 
+- - IF `application_docs_raw` is present → call `upload_application_package()` to:
+
+       - Create Drive folder /packages/{grant_id}/
+       - Upload extracted files
+       - Return and store folder URL → `application_package_link`
+- - If application_questions_text exists → call `upload_questions_doc()` to:
+
+       - Create Google Doc
+       - Insert extracted questions text
+       - Return and store doc URL → `application_questions_link`
 
 - Upload validated CSV file to a dedicated Google Drive folder /Final Data/{YYYY-MM-DD}/.
 
@@ -202,6 +217,11 @@ Contents:
               - Quality Metrics Sheet
               - Final CSV on Drive
 
+## Monitoring and Reporting
+
+- Extraction Log Sheet: Tracks batch runs, record counts, and failures.
+- Quality Metrics Sheet: Shows completeness and error rates.
+- Email Notification: Summarizes each run with metrics and links
 
 ## Project Structure
 
