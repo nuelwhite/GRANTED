@@ -167,13 +167,13 @@ application_url | Application link | ✅ | https://example.com/apply|
 
 ## Scheduling
 
+| Task	| Frequency |	Method |
+|---|---|---|
+|Data Extraction | Daily | Cron (0 6 * * *) |
+| Transformation & Validation | After extraction | Script trigger |
+| Google Drive Upload | After validation	Script trigger |
+| Email Notification	| On completion	| SMTP/Google Mail API |
 
-Task	Frequency	Method
-Data Extraction	Daily	Cron (0 6 * * *)
-Transformation & Validation	After extraction	Script trigger
-Google Drive Upload	After validation	Script trigger
-Email Notification	On completion	SMTP/Google Mail API
-```
 
 ## Notifications
 
