@@ -245,6 +245,6 @@ Contents:
 └── config/
     ├── credentials.json           # Google API creds
     ├── drive_folders.yaml         # Folder IDs for raw_data, clean_data, etc.
-    ├── email_recipients.yaml
+    ├── email_recipients.yaml      # list of emails for notification
     └── sources_list.json          # json file containing source urls
 ```
