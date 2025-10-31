@@ -18,12 +18,12 @@ load_dotenv()
 
 
 # configure gemini
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+client = genai.Client()
 
 
 # Configure file paths
-SOURCES_FILE = "config/sources_list.json"
-OUTPUT_DIR = "data/raw"
+SOURCES_FILE = "/config/sources_list.json"
+OUTPUT_DIR = "/data/raw"
 
 
 # create a directory if it doesn't exist
@@ -48,7 +48,7 @@ def extract_from_source(url):
     """
 
     try:
-        response = genai.GenerativeModel("gemini-1.5-flash").generate_content(prompt)
+        response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
         result_text = response.text.strip()
         data = json.loads(result_text)
         data["source_url"] = url
@@ -57,7 +57,6 @@ def extract_from_source(url):
         print(f"Error extracting from {url}: {e}")
         return {"source_url": url, "error": str(e)}
 
-    
 
 # function to run main extraction
 def run_extraction():
