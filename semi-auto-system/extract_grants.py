@@ -7,7 +7,7 @@ import os
 import json
 import time
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timezone
 from google import genai
 from dotenv import load_dotenv
 import logging
@@ -54,5 +54,39 @@ def extract_from_source(url):
         data["source_url"] = url
         return data
     except Exception as e:
-        print(f"⚠️ Error extracting from {url}: {e}")
+        print(f"Error extracting from {url}: {e}")
         return {"source_url": url, "error": str(e)}
+
+    
+
+# function to run main extraction
+def run_extraction():
+    with open(SOURCES_FILE, 'r') as f:
+        sources = json.load(f).get("sources", [])
+
+    
+    all_data = []
+    for url in sources:
+        print(f"Extracting data from {url} ...")
+
+        grant_data = extract_from_source(url)
+        all_data.append(grant_data)
+
+        time.sleep(5)   # sleep for 5 secs to avoid rate limits
+
+        # convert extracted data to pandas Dataframe
+        df = pd.DataFrame(all_data)
+
+
+        # save dataframe as csv with timestamp
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        output_file = os.path.join(OUTPUT_DIR, f"grants_raw_{timestamp}.csv")
+
+        df.to_csv(output_file, index=False)
+
+        print(f"Extraction Complete. Saved to {output_file}")
+        print(f"Total grants extraccted: {len(df)}")
+
+    
+if "__name__" == "__main__":
+    run_extraction()
