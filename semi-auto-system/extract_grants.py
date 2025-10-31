@@ -46,3 +46,13 @@ def extract_from_source(url):
     sdg_alignment, application_url, is_recurring, notes,
     application_docs_raw, application_questions_text
     """
+
+    try:
+        response = genai.GenerativeModel("gemini-1.5-flash").generate_content(prompt)
+        result_text = response.text.strip()
+        data = json.loads(result_text)
+        data["source_url"] = url
+        return data
+    except Exception as e:
+        print(f"⚠️ Error extracting from {url}: {e}")
+        return {"source_url": url, "error": str(e)}
