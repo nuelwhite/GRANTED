@@ -44,16 +44,6 @@ class GrantData(BaseModel):
     application_docs_raw: str = Field(description="Raw text snippet listing required application documents.")
     application_questions_text: str = Field(description="Raw text snippet of the main questions or sections in the application.")
 
-prompt = f"""
-    You are a data extraction assistant for a grant management platform.
-    Extract all required grant-related information from the following page:
-    {url}
-    
-    Ensure amounts are converted to the smallest currency unit (e.g., CENTS if currency is USD/CAD).
-    Populate all fields with the best available data. If data is unavailable, use default/empty values like None for Optionals, or empty lists for List fields.
-    """
-
-
 # --- 2. SETUP AND CONFIGURATION ---
 
 # load environment variables
@@ -79,8 +69,8 @@ log_file = f"semi-auto-system/data/logs/extraction_{timestamp}.log"
 ## Configure logging
 logging.basicConfig(
     filename=log_file,
-    level=logging.INFO
-    format="%(asctime)s [%(levelname)s] %(message)s"
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
 )
 logging.getLogger().addHandler(logging.StreamHandler())
 
@@ -105,7 +95,18 @@ def extract_grant(url, retries = 3, backoff = 2.0):
         attempt += 1
 
         try:
-            logging.info(f"Extracting from: {URL}. \nAttempting {attempt}/{retries}")
+            logging.info(f"Extracting from: {url}. \nAttempting {attempt}/{retries}")
+
+            # prompt for data collection
+            prompt = f"""
+                    You are a data extraction assistant for a grant management platform.
+                    Extract all required grant-related information from the following page:
+                    {url}
+                    
+                    Ensure amounts are converted to the smallest currency unit (e.g., CENTS if currency is USD/CAD).
+                    Populate all fields with the best available data. If data is unavailable, use default/empty values like None for Optionals, or empty lists for List fields.
+                    """
+
             
             # make the request to gemini with the Structured Output configuration
             response = client.models.generate_content(
@@ -144,7 +145,7 @@ def run_batch_extraction():
 
     for i, url in enumerate(sources, start=1):
         logging.info(f"\n---- [{i}/{total}] Processing {url} ----")
-        result = extract_with_retry(url)
+        result = extract_grant(url)
         if "error" in result:
             failures.append(result)
         results.append(result)
@@ -154,16 +155,16 @@ def run_batch_extraction():
     df = pd.DataFrame(results)
     out_file = f"data/raw/grants_raw_{timestamp}.csv"
     df.to_csv(out_file, index=False, encoding="utf-8")
-    logging.info(f"💾 Saved all records to {out_file}")
+    logging.info(f"Saved all records to {out_file}")
 
     # Save failed URLs separately
     if failures:
         failed_df = pd.DataFrame(failures)
         failed_path = f"data/raw/failed_{timestamp}.csv"
         failed_df.to_csv(failed_path, index=False)
-        logging.warning(f"⚠️ {len(failures)} failures saved to {failed_path}")
+        logging.warning(f"{len(failures)} failures saved to {failed_path}")
     else:
-        logging.info("✅ All sources processed successfully.")
+        logging.info("All sources processed successfully.")
 
     
     logging.info("Extraction job complete.")
