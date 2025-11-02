@@ -1,12 +1,23 @@
+""" Final version 1 of the extraction script
+    This script extracts grant data from the URLs avaliable
+    And saves the extracted data in csv format in 'data/raw' directory
+    with extraction logs in 'data/logs'
+"""
+
 import json 
 import os
+import random
+import time
+import logging
+import pandas as pd
+from datetime import datetime
 from dotenv import load_dotenv
 from google import genai
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
-# --- 1. Define the Pydantic Schema for Structured Output ---
-# This ensures the model returns VALID JSON that strictly follows this structure.
+# --- 1. Define Grant Schema for data collection using Pydantic"
+
 class GrantData(BaseModel):
     """Structured data extracted from a grant page."""
     grant_id: str = Field(description="Unique identifier for the grant, e.g., 'VentureLAB_AAI_2024'.")
@@ -33,45 +44,6 @@ class GrantData(BaseModel):
     application_docs_raw: str = Field(description="Raw text snippet listing required application documents.")
     application_questions_text: str = Field(description="Raw text snippet of the main questions or sections in the application.")
 
-
-# --- 2. Setup and Source Loading ---
-
-# load environment variables
-load_dotenv()
-
-# load api key
-api_key = os.getenv("GEMINI_API_KEY")
-
-# configure gemini
-client = genai.Client(api_key=api_key)
-
-# Handle gracefully if API does not exist
-if not api_key:
-    raise ValueError("No GEMINI AI API key found in the .env file")
-
-# load sources file
-SOURCES_FILE = 'semi-auto-system\config\sources_list.json'
-
-try:
-    with open(SOURCES_FILE, 'r') as f:
-        sources = json.load(f).get('sources', [])
-except FileNotFoundError:
-    print(f"Error: Could not find sources file at {SOURCES_FILE}")
-    sources = []
-
-print(f'loaded {len(sources)} sources.')
-print(f'first source: {sources[0] if sources else None}')
-
-if not sources:
-    raise ValueError("No sources found in sources_list.json or failed to load.")
-
-# select a source
-url = sources[0]
-print(f"using data source {url}")
-
-
-# --- 3. Prompt and API Call (Using Structured Output) ---
-
 prompt = f"""
     You are a data extraction assistant for a grant management platform.
     Extract all required grant-related information from the following page:
@@ -82,40 +54,122 @@ prompt = f"""
     """
 
 
-# make the request to gemini with the Structured Output configuration
-print("\nMaking request to Gemini model...")
-response = client.models.generate_content(
-    model="gemini-2.5-flash",
-    contents=prompt,
-    config=genai.types.GenerateContentConfig(
-        response_mime_type="application/json", # Enforce JSON output
-        response_schema=GrantData,          # Use the Pydantic model for schema
-    ),
+# --- 2. SETUP AND CONFIGURATION ---
+
+# load environment variables
+load_dotenv()
+
+# load api key
+api_key = os.getenv("GEMINI_API_KEY")
+if not api_key:
+    raise ValueError("No GEMINI AI API key found in the .env file")
+
+# configure gemini
+client = genai.Client(api_key=api_key)
+
+
+# Directories
+os.makedirs("semi-auto-system/data/raw")
+os.makedirs("semi-auto-system/data/logs")
+
+timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+log_file = f"semi-auto-system/data/logs/extraction_{timestamp}.log"
+
+
+## Configure logging
+logging.basicConfig(
+    filename=log_file,
+    level=logging.INFO
+    format="%(asctime)s [%(levelname)s] %(message)s"
 )
+logging.getLogger().addHandler(logging.StreamHandler())
 
+# --- 3. BEGIN EXTRACTION ---
 
-# --- 4. Processing and Saving the Response ---
+logging.info("...STARTING EXTRACTION PIPELINE...")
 
-raw_text = response.text.strip()
-print("First 300 characters of raw text response:\n", raw_text[:300], "...\n")
-
-# Safely parse JSON (this should now succeed consistently)
+# load config file containing URLs
+SOURCES_FILE = r"semi-auto-system/config/sources_list.json"
 try:
-    data = json.loads(raw_text)
-    print("\nSuccessfully Parsed JSON Output:\n")
-    print(json.dumps(data, indent=2))
-except json.JSONDecodeError as e:
-    # This block is now a fallback, primarily for debugging model failures if they occur
-    print("could not parse response as json", e)
-    print("Raw text causing error:", raw_text)
+    with open(SOURCES_FILE, 'r') as f:
+        sources = json.load(f).get('sources', [])
+        logging.info(f"Loaded {len(sources)} sources from {SOURCES_FILE}")
+except FileNotFoundError:
+    logging.error(f"Error: Could not find sources file at {SOURCES_FILE}")
+    sources = []
+
+# --- Main Extraction Point---
+def extract_grant(url, retries = 3, backoff = 2.0):
+    attempt = 0
+    while attempt < retries:
+        attempt += 1
+
+        try:
+            logging.info(f"Extracting from: {URL}. \nAttempting {attempt}/{retries}")
+            
+            # make the request to gemini with the Structured Output configuration
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+                config=genai.types.GenerateContentConfig(
+                    response_mime_type="application/json", 
+                    response_schema=GrantData,          
+                    ),
+                )
+
+            # parse response
+            parsed_grant = response.parsed
+            grant_dict = parsed_grant.model_dump()
+            grant_dict["source_url"] = url 
+            logging.info(f"SUCCESS: {parsed_grant.title[:70]}")
+            return grant_dict
+
+        except Exception as e:
+            wait_time = backoff * (2 ** (attempt - 1)) + random.uniform(0, 1)
+            logging.warning(f"ERROR: {e}. Retrying in {wait_time:1f}s...")
+            time.sleep(wait_time)
+
+    # if all attempts fail
+    logging.error(f"Extraction failed after {retries} attempts: {url}")
+
+    return {"source_url": url, "error": "Extraction failed after retries"}
 
 
-# Save response file (FIXED: os.makedirs ensures the directory exists)
-os.makedirs("data/raw", exist_ok=True) 
-with open("data/raw/sample_response.txt", "w", encoding="utf-8") as f:
-    f.write(raw_text)
-    print("\nSaved raw response to data/raw/sample_response.txt")
 
-# The grant data is also available as a Pydantic object for direct use in Python:
-parsed_grant: GrantData = response.parsed
-print(f"\nTitle: {parsed_grant.title}")
+# Execution loop
+
+def run_batch_extraction():
+    results, failures = [], []
+    total = len(sources)
+
+    for i, url in enumerate(sources, start=1):
+        logging.info(f"\n---- [{i}/{total}] Processing {url} ----")
+        result = extract_with_retry(url)
+        if "error" in result:
+            failures.append(result)
+        results.append(result)
+        time.sleep(2)
+
+    # Save all results
+    df = pd.DataFrame(results)
+    out_file = f"data/raw/grants_raw_{timestamp}.csv"
+    df.to_csv(out_file, index=False, encoding="utf-8")
+    logging.info(f"💾 Saved all records to {out_file}")
+
+    # Save failed URLs separately
+    if failures:
+        failed_df = pd.DataFrame(failures)
+        failed_path = f"data/raw/failed_{timestamp}.csv"
+        failed_df.to_csv(failed_path, index=False)
+        logging.warning(f"⚠️ {len(failures)} failures saved to {failed_path}")
+    else:
+        logging.info("✅ All sources processed successfully.")
+
+    
+    logging.info("Extraction job complete.")
+    logging.info(f"Total sources: {total}")
+    logging.info(f"Successful: {total - len(failures)}")
+    logging.info(f"Failed: {len(failures)}")
+
+if __name__ == "__main__":
+    run_batch_extraction()
