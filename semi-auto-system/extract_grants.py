@@ -59,8 +59,8 @@ client = genai.Client(api_key=api_key)
 
 
 # Directories
-os.makedirs("semi-auto-system/data/raw")
-os.makedirs("semi-auto-system/data/logs")
+os.makedirs("semi-auto-system/data/raw", exist_ok=True)
+os.makedirs("semi-auto-system/data/logs", exist_ok=True)
 
 timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
 log_file = f"semi-auto-system/data/logs/extraction_{timestamp}.log"
@@ -153,14 +153,14 @@ def run_batch_extraction():
 
     # Save all results
     df = pd.DataFrame(results)
-    out_file = f"data/raw/grants_raw_{timestamp}.csv"
+    out_file = f"semi-auto-system/data/raw/grants_raw_{timestamp}.csv"
     df.to_csv(out_file, index=False, encoding="utf-8")
     logging.info(f"Saved all records to {out_file}")
 
     # Save failed URLs separately
     if failures:
         failed_df = pd.DataFrame(failures)
-        failed_path = f"data/raw/failed_{timestamp}.csv"
+        failed_path = f"semi-auto-system/data/raw/failed_{timestamp}.csv"
         failed_df.to_csv(failed_path, index=False)
         logging.warning(f"{len(failures)} failures saved to {failed_path}")
     else:
