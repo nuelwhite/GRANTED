@@ -9,6 +9,22 @@ from typing import List, Optional
 from utils.email_notifier import send_notification
 
 
+# setup logging
+def setup_log():
+    os.makedirs("semi-auto-system/data/logs", exist_ok=True)
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+
+    log_file = f"semi-auto-system/data/logs/validation_logs_{timestamp}.log"
+
+    logging.basicConfig(
+        filename=log_file,
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+    )
+    logging.getLogger().addHandler(logging.StreamHandler())
+    return log_file
+    
+
 # --1. DEFINE SCHEMA
 class GrantData(BaseModel):
     """Structured data extracted from a grant page."""
@@ -35,3 +51,4 @@ class GrantData(BaseModel):
     notes: str = Field(description="Any essential caveats or additional information.")
     application_docs_raw: str = Field(description="Raw text snippet listing required application documents.")
     application_questions_text: str = Field(description="Raw text snippet of the main questions or sections in the application.")
+
