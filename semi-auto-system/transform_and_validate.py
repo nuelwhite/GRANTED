@@ -23,7 +23,7 @@ def setup_log():
     )
     logging.getLogger().addHandler(logging.StreamHandler())
     return log_file
-    
+
 
 # --1. DEFINE SCHEMA
 class GrantData(BaseModel):
@@ -51,4 +51,38 @@ class GrantData(BaseModel):
     notes: str = Field(description="Any essential caveats or additional information.")
     application_docs_raw: str = Field(description="Raw text snippet listing required application documents.")
     application_questions_text: str = Field(description="Raw text snippet of the main questions or sections in the application.")
+
+# - 2. LOAD RAW FILE
+def get_raw_file():
+    files = glob.glob("semi-suto-system/data/raw/grants_raw_*.csv")
+
+    if not files:
+        logging.error("No raw CSV files found in data/raw")
+        raise FileNotFoundError("No Raw CSV files avaliable")
+
+    latest = max(files, key=os.path.getctime)
+    logging.info(f"Using latest raw file: {latest}")
+
+    return latest
+
+
+# --3. VALIDATION LOGIC
+def validate_records(df):
+    valid_records = []
+    invalid_records = []
+
+    for _, row in df.iterrows():
+        record = row.to_dict()
+
+        try:
+            validated_grant = GrantData(**record)
+            valid_records.append(validated_grant.model_dump())
+        except ValidationError as e:
+            record["validation_errors"] = str(e)
+            invalid_records.append(record)
+            logging.warning(f"Validation failed for record {record.get('grant_id', 'N/A')}")
+
+    return valid_records, invalid_records
+
+
 
