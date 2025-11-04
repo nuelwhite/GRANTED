@@ -54,7 +54,7 @@ class GrantData(BaseModel):
 
 # - 2. LOAD RAW FILE
 def get_raw_file():
-    files = glob.glob("semi-suto-system/data/raw/grants_raw_*.csv")
+    files = glob.glob("data/raw/grants_raw_*.csv")
 
     if not files:
         logging.error("No raw CSV files found in data/raw")
@@ -85,4 +85,44 @@ def validate_records(df):
     return valid_records, invalid_records
 
 
+# --4. MAIN EXECUTION
+def main():
+    load_dotenv()
+    os.makedirs("semi-auto-system/data/clean", exist_ok=True)
+    os.makedirs("semi-auto-system/data/metrics", exist_ok=True)
 
+    log_file = setup_log()
+    logging.info("...Starting Data Transformation and Validation...")
+
+
+    input_file = get_raw_file()
+    df = pd.read_csv(input_file)
+    logging.info(f"Validating {len(df)} records...")
+
+    valid, invalid = validate_records(df)
+
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    clean_path = f"semi-auto-system/data/clean/grants_clean_{timestamp}.csv"
+    invalid_path = f"semi-auto-system/data/metrics/invalid_records_{timestamp}.csv"
+
+    pd.DataFrame(valid).to_csv(clean_path, index=False)
+    pd.DataFrame(invalid).to_csv(invalid_path, index=False)
+
+    logging.info(f"Valid records: {len(valid)}")
+    logging.info(f"Invalid records: {len(invalid)}")
+    logging.info(f"Processed data saved to {clean_path}")
+    logging.info(f"Invalid data saved to {invalid_path}")
+
+    send_notification(
+        success_count=len(valid),
+        fail_count=len(invalid),
+        csv_path=clean_path,
+        log_path=log_file,
+    )
+
+    logging.info("Email summary sent to team.")
+    logging.info("Validation phase complete.")
+
+
+if __name__ == "__main__":
+    main()
