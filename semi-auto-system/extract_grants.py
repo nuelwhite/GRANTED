@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 from google import genai
 from pydantic import BaseModel, Field
 from typing import List, Optional
+from utils.email_notifier import send_notification
 
 # --- 1. Define Grant Schema for data collection using Pydantic"
 
@@ -171,6 +172,15 @@ def run_batch_extraction():
     logging.info(f"Total sources: {total}")
     logging.info(f"Successful: {total - len(failures)}")
     logging.info(f"Failed: {len(failures)}")
+    
+    # Return metrics and output path for downstream notification
+    return (total - len(failures), len(failures), out_file)
 
 if __name__ == "__main__":
-    run_batch_extraction()
+    success_count, fail_count, out_file = run_batch_extraction()
+    send_notification(
+        success_count=success_count,
+        fail_count=fail_count,
+        csv_path=out_file,
+        log_path=log_file,
+        )
