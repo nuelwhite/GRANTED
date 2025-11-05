@@ -7,14 +7,16 @@ from datetime import datetime
 from pydantic import BaseModel, Field, ValidationError
 from typing import List, Optional
 from utils.email_notifier import send_notification
+import ast 
+import math
 
 
 # setup logging
 def setup_log():
-    os.makedirs("semi-auto-system/data/logs", exist_ok=True)
+    os.makedirs("data/logs", exist_ok=True)
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
 
-    log_file = f"semi-auto-system/data/logs/validation_logs_{timestamp}.log"
+    log_file = f"data/logs/validation_logs_{timestamp}.log"
 
     logging.basicConfig(
         filename=log_file,
@@ -67,20 +69,148 @@ def get_raw_file():
 
 
 # --3. VALIDATION LOGIC
+def _is_nan(x):
+    try:
+        return isinstance(x, float) and math.isnan(x)
+    except Exception:
+        return False
+
+def preprocess_row(record: dict) -> dict:
+    """
+    Try to coerce CSV string values into types expected by GrantData.
+    - Convert "['A','B']" or '["A","B"]' to Python list via ast.literal_eval
+    - Convert semicolon-separated strings "a;b" to list ["a","b"]
+    - Convert numeric floats to int for amount_min/amount_max if appropriate
+    - Convert NaN to None
+    - Convert 'True'/'False'/'1'/'0' to bool for is_recurring
+    - Strip whitespace and normalize empty strings to None where appropriate
+    """
+    out = dict(record)  # copy
+
+    # Fields that should be lists
+    list_fields = [
+        "eligible_provinces",
+        "eligible_applicant_type",
+        "eligible_industries",
+        "target_beneficiaries",
+        "supported_project_types",
+        "sdg_alignment",
+    ]
+
+    for f in list_fields:
+        v = out.get(f, None)
+        if v is None or _is_nan(v):
+            out[f] = []
+            continue
+        # If already a list, keep it
+        if isinstance(v, list):
+            continue
+        if isinstance(v, str):
+            s = v.strip()
+            if s == "":
+                out[f] = []
+                continue
+            # Try literal_eval for python list string
+            try:
+                parsed = ast.literal_eval(s)
+                if isinstance(parsed, list):
+                    out[f] = [str(x).strip() for x in parsed]
+                    continue
+            except Exception:
+                pass
+            # Try semicolon or comma separated
+            if ";" in s:
+                out[f] = [x.strip() for x in s.split(";") if x.strip()]
+                continue
+            if "," in s and not s.startswith("http"):
+                out[f] = [x.strip() for x in s.split(",") if x.strip()]
+                continue
+            # fallback single value
+            out[f] = [s]
+            continue
+        # Other types fallback to empty
+        out[f] = []
+
+    # Numeric amounts: accept floats/strings, convert to int (cents)
+    for amt_field in ("amount_min", "amount_max"):
+        v = out.get(amt_field, None)
+        if v is None or _is_nan(v) or (isinstance(v, str) and v.strip() == ""):
+            out[amt_field] = None
+            continue
+        try:
+            # if string with currency symbols, remove non-digit
+            if isinstance(v, str):
+                s = v.replace(",", "").strip()
+                # remove currency symbols
+                s = "".join(ch for ch in s if (ch.isdigit() or ch in ".-"))
+                val = float(s)
+            else:
+                val = float(v)
+            # convert to smallest unit (assumes input was whole dollars; adjust if already cents)
+            # If your extraction already outputs cents, remove the *100 below.
+            out[amt_field] = int(round(val))  # keep as integer unit (assume whole units)
+        except Exception:
+            out[amt_field] = None
+
+    # currency: normalize None or empty to "CAD" default if you want
+    cur = out.get("currency", None)
+    if cur is None or _is_nan(cur) or (isinstance(cur, str) and cur.strip() == ""):
+        out["currency"] = "CAD"
+    else:
+        out["currency"] = str(cur).strip().upper()
+
+    # deadline: keep as string, but convert NaN -> empty string
+    d = out.get("deadline", None)
+    if d is None or _is_nan(d):
+        out["deadline"] = ""
+    else:
+        out["deadline"] = str(d).strip()
+
+    # is_recurring: coerce to bool
+    ir = out.get("is_recurring", None)
+    if isinstance(ir, bool):
+        out["is_recurring"] = ir
+    elif ir in (1, "1", "True", "true", "TRUE", "yes", "Yes"):
+        out["is_recurring"] = True
+    elif ir in (0, "0", "False", "false", "FALSE", "no", "No", None):
+        out["is_recurring"] = False
+    else:
+        out["is_recurring"] = False
+
+    # Strings: convert NaN to empty string for required string fields
+    str_fields = [
+        "grant_id", "title", "description", "funder",
+        "funder_type", "funding_type", "application_complexity",
+        "geography_details", "application_url", "notes",
+        "application_docs_raw", "application_questions_text"
+    ]
+    for f in str_fields:
+        v = out.get(f, None)
+        if v is None or _is_nan(v):
+            out[f] = ""
+        else:
+            out[f] = str(v).strip()
+
+    return out
+
+
 def validate_records(df):
     valid_records = []
     invalid_records = []
 
-    for _, row in df.iterrows():
+    for idx, row in df.iterrows():
         record = row.to_dict()
+        pre = preprocess_row(record)
 
         try:
-            validated_grant = GrantData(**record)
-            valid_records.append(validated_grant.model_dump())
+            validated = GrantData(**pre)
+            valid_records.append(validated.model_dump())
         except ValidationError as e:
-            record["validation_errors"] = str(e)
+            # structured errors from Pydantic
+            errors = e.errors() if hasattr(e, "errors") else str(e)
+            record["validation_errors"] = errors
             invalid_records.append(record)
-            logging.warning(f"Validation failed for record {record.get('grant_id', 'N/A')}")
+            logging.warning(f"Validation failed for record {pre.get('grant_id', 'N/A')} - errors: {errors}")
 
     return valid_records, invalid_records
 
@@ -88,8 +218,8 @@ def validate_records(df):
 # --4. MAIN EXECUTION
 def main():
     load_dotenv()
-    os.makedirs("semi-auto-system/data/clean", exist_ok=True)
-    os.makedirs("semi-auto-system/data/metrics", exist_ok=True)
+    os.makedirs("data/clean", exist_ok=True)
+    os.makedirs("data/metrics", exist_ok=True)
 
     log_file = setup_log()
     logging.info("...Starting Data Transformation and Validation...")
@@ -102,8 +232,8 @@ def main():
     valid, invalid = validate_records(df)
 
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    clean_path = f"semi-auto-system/data/clean/grants_clean_{timestamp}.csv"
-    invalid_path = f"semi-auto-system/data/metrics/invalid_records_{timestamp}.csv"
+    clean_path = f"data/clean/grants_clean_{timestamp}.csv"
+    invalid_path = f"data/metrics/invalid_records_{timestamp}.csv"
 
     pd.DataFrame(valid).to_csv(clean_path, index=False)
     pd.DataFrame(invalid).to_csv(invalid_path, index=False)
