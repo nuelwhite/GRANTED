@@ -35,7 +35,7 @@ def main():
         ("Extraction", ["python", "extract_grants.py"]),
         ("Transformation + Validation", ["python", "transform_and_validate.py"]),
         ("Metrics Computation", ["python", "compute_metrics.py"]),
-        ("Google Drive Upload", ["python", "/utils/drive_uploader.py"]),
+        ("Google Drive Upload", ["python", "utils/drive_uploader.py"]),
     ]
 
     for stage_name, command in stages:
