@@ -1,0 +1,11 @@
+
+services:
+  granted-pipeline:
+    build: .
+    container_name: granted_pipeline
+    env_file:
+      - ./.env
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+    restart: unless-stopped
