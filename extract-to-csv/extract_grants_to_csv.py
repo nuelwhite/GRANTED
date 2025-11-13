@@ -283,28 +283,31 @@ def run_pipeline():
 
         logging.info(f"\n---- [{i}/{total}] Processing {url} ----")
 
-        # 1️⃣ Extract raw JSON from Gemini
+        # 1. Extract raw JSON from Gemini
         raw = extract_from_gemini(url)
         if not raw:
             all_invalid.append({"source_url": url, "error": "Gemini extraction failed"})
             continue
 
-        # 2️⃣ Parse + validate
+        # 2. Parse + validate
         valid, invalid = parse_and_validate(raw, url)
 
-        # 3️⃣ Enrich each valid grant
+        # 3. Enrich each valid grant
         for grant in valid:
             summary, keywords = enrich_grant_text(grant["description"], grant["notes"])
-            grant["summary"] = summary
-            grant["keywords"] = keywords
 
-        # 4️⃣ Aggregate results
+            # Construct enriched notes
+            enriched_note = f"{grant['notes'].strip()}\n\n---\nSummary: {summary}\nKeywords: {', '.join(keywords)}"
+            grant["notes"] = enriched_note
+
+
+        # 4. Aggregate results
         all_valid.extend(valid)
         all_invalid.extend(invalid)
 
         time.sleep(2)  # slight delay to avoid rate limit
 
-    # 5️⃣ Save all results to CSVs
+    # 5. Save all results to CSVs
     save_to_csv(all_valid, all_invalid)
 
     logging.info("=== Extraction Complete ===")
