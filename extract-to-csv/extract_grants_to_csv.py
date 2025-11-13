@@ -178,6 +178,30 @@ def parse_and_validate(raw_json: str, source_url: str):
     return valid_records, invalid_records
 
 
+def quality_check(grant: dict) -> bool:
+    """
+    Returns True if grant passes quality checks,
+    False if it needs manual review.
+    """
+    # Condition 1 — missing max amount
+    if not grant.get("amount_max"):
+        return False
+
+    # Condition 2 — empty critical fields
+    critical_fields = ["title", "description", "funder", "application_url"]
+    empty_count = sum(1 for f in critical_fields if not grant.get(f))
+    if empty_count > 1:  # more than one critical field empty
+        return False
+
+    # Condition 3 — description too short or generic
+    desc = grant.get("description", "").strip().lower()
+    if len(desc) < 80 or "click here" in desc or "learn more" in desc:
+        return False
+
+    return True
+
+
+
 def enrich_grant_text(description: str, notes: str):
     """
     Uses Gemini to generate a concise summary and list of keywords for faster AI matching.
@@ -307,8 +331,25 @@ def run_pipeline():
 
         time.sleep(2)  # slight delay to avoid rate limit
 
-    # 5. Save all results to CSVs
-    save_to_csv(all_valid, all_invalid)
+    # 5. Split between high-quality and manual-review grants
+    high_quality, manual_review = [], []
+
+    for grant in all_valid:
+        if quality_check(grant):
+            high_quality.append(grant)
+        else:
+            manual_review.append(grant)
+
+    # Save them separately
+    save_to_csv(high_quality, all_invalid)
+
+    if manual_review:
+        review_path = os.path.join(DATA_DIR, "manual_review.csv")
+        df_review = pd.DataFrame(manual_review)
+        append_review = os.path.exists(review_path)
+        df_review.to_csv(review_path, mode="a", header=not append_review, index=False, encoding="utf-8")
+        logging.warning(f"{len(manual_review)} records moved to manual review at {review_path}")
+
 
     logging.info("=== Extraction Complete ===")
     logging.info(f"Total URLs processed: {total}")
