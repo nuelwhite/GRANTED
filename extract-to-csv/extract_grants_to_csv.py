@@ -66,21 +66,16 @@ TEMPERATURE = 0.3
 MAX_TOKENS = 4096  
 
 
-def build_prompt(url):
-    """
-    Creates a detailed extraction prompt for Gemini.
-    Emphasizes completeness and detail for description and notes fields.
-    """
+def build_prompt(url: str) -> str:
     return f"""
-You are a grant data extraction assistant for an AI-powered funding-match platform.
+You are a grant data extraction assistant for an AI-powered funding platform.
 
-Extract all detailed information about grants from this webpage: {url}
+Go to the webpage: {url}
 
-If the page lists multiple grants, extract *all* of them as an array of JSON objects.
-If it contains a single grant, return a single JSON object.
+If the page lists **multiple grants or programs**, extract ALL of them as an array of JSON objects.
+If it describes **a single grant**, return one JSON object.
 
-Use this JSON structure exactly (fill empty or unknown values with null, [] or ""):
-
+Each grant must follow this structure exactly:
 {{
   "grant_id": "",
   "title": "",
@@ -106,11 +101,10 @@ Use this JSON structure exactly (fill empty or unknown values with null, [] or "
 }}
 
 Guidelines:
-- Make `description` long and rich in detail — include purpose, scope, eligibility, and funding highlights.
-- Add any extra clarifications, exceptions, or context in `notes`.
-- Use ISO format for dates (YYYY-MM-DD) when possible.
-- Do not invent information. Keep factual accuracy.
-- Return *only* valid JSON — no text outside the JSON structure.
+- When processing a portal page, extract **all grant programs listed**, not just the first.
+- The 'description' must include full context, purpose, eligibility, and funding details — as detailed as possible.
+- Use factual, well-structured text. Never invent information.
+- Return *only valid JSON* — no markdown or text outside JSON.
 """
 
 
@@ -167,16 +161,62 @@ def parse_and_validate(raw_json: str, source_url: str):
         return valid_records, invalid_records
 
     for item in parsed:
-        # Always add source URL for traceability
         item["source_url"] = source_url
+
+        # Auto-generate grant_id if missing or empty
+        if not item.get("grant_id"):
+            funder_base = (item.get("funder") or "UNKNOWN").replace(" ", "_").upper()[:10]
+            item["grant_id"] = f"{funder_base}_{int(time.time())}_{random.randint(100,999)}"
+
         try:
             validated = GrantData(**item)
-            valid_records.append(validated.dict())
+            valid_records.append(validated.model_dump())
         except Exception as e:
             logging.warning(f"Validation failed for {source_url}: {e}")
             invalid_records.append({"source_url": source_url, "error": str(e)})
 
     return valid_records, invalid_records
+
+
+def enrich_grant_text(description: str, notes: str):
+    """
+    Uses Gemini to generate a concise summary and list of keywords for faster AI matching.
+    """
+    try:
+        prompt = f"""
+        You will be given a grant description and notes.
+        Create two short outputs:
+        1. summary: 2–3 sentences summarizing the purpose, eligibility, and impact.
+        2. keywords: a list of 5–10 relevant thematic keywords (lowercase).
+
+        Return strictly as JSON with fields:
+        {{
+            "summary": "",
+            "keywords": []
+        }}
+
+        Description:
+        {description}
+
+        Notes:
+        {notes}
+        """
+
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=prompt,
+            config=genai.types.GenerateContentConfig(
+                temperature=0.4,
+                max_output_tokens=512,
+                response_mime_type="application/json"
+            ),
+        )
+
+        enriched = json.loads(response.text)
+        return enriched.get("summary", ""), enriched.get("keywords", [])
+    except Exception as e:
+        logging.warning(f"Keyword enrichment failed: {e}")
+        return "", []
 
 
 
@@ -205,34 +245,66 @@ def save_to_csv(valid_records: list, invalid_records: list):
         logging.warning(f"{len(invalid_records)} invalid records logged in {invalid_path}")
 
 
+
+def load_processed_urls():
+    """
+    Load URLs that have already been successfully processed to avoid duplication.
+    """
+    if not os.path.exists(VALIDATED_CSV):
+        return set()
+
+    try:
+        df = pd.read_csv(VALIDATED_CSV, usecols=["source_url"])
+        return set(df["source_url"].dropna().tolist())
+    except Exception:
+        return set()
+
+
 def run_pipeline():
     """
     Full end-to-end process:
     1. Loop through URLs
     2. Extract via Gemini
     3. Parse + Validate
-    4. Save valid data
+    4. Enrich (summary + keywords)
+    5. Save valid + invalid data
     """
     all_valid, all_invalid = [], []
     total = len(SOURCES)
+    processed = load_processed_urls()
+
     logging.info(f"Starting batch extraction for {total} sources.")
+    logging.info(f"Skipping {len(processed)} URLs already processed.")
 
     for i, url in enumerate(SOURCES, start=1):
+        if url in processed:
+            logging.info(f"---- Skipping already processed: {url}")
+            continue
+
         logging.info(f"\n---- [{i}/{total}] Processing {url} ----")
 
-        raw_json = extract_from_gemini(url)
-        valid, invalid = parse_and_validate(raw_json, url)
+        # 1️⃣ Extract raw JSON from Gemini
+        raw = extract_from_gemini(url)
+        if not raw:
+            all_invalid.append({"source_url": url, "error": "Gemini extraction failed"})
+            continue
 
+        # 2️⃣ Parse + validate
+        valid, invalid = parse_and_validate(raw, url)
+
+        # 3️⃣ Enrich each valid grant
+        for grant in valid:
+            summary, keywords = enrich_grant_text(grant["description"], grant["notes"])
+            grant["summary"] = summary
+            grant["keywords"] = keywords
+
+        # 4️⃣ Aggregate results
         all_valid.extend(valid)
         all_invalid.extend(invalid)
 
-        # (Optional) store raw responses for debugging
-        if raw_json:
-            with open(RAW_OUTPUT_PATH, "a", encoding="utf-8") as f:
-                f.write(json.dumps({"url": url, "response": raw_json}) + "\n")
+        time.sleep(2)  # slight delay to avoid rate limit
 
-        time.sleep(2)  # slight delay for rate limits
-
+    # 5️⃣ Save all results to CSVs
     save_to_csv(all_valid, all_invalid)
 
     logging.info("=== Extraction Complete ===")
@@ -240,6 +312,7 @@ def run_pipeline():
     logging.info(f"Valid grants: {len(all_valid)}")
     logging.info(f"Invalid grants: {len(all_invalid)}")
     logging.info(f"Output file: {VALIDATED_CSV}")
+
 
 
 if __name__ == "__main__":
