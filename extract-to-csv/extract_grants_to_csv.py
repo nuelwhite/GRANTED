@@ -24,8 +24,8 @@ if not API_KEY:
 CONFIG_PATH = "config/sources_list.json"
 DATA_DIR = "data"
 RAW_OUTPUT_DIR = os.path.join(DATA_DIR, "raw_output.jsonl")
-VALIDATED_CSV = os.path.join(DATA_DIR, "validated_grants.csv")
-LOG_FILE = os.path.join(DATA_DIR, f"run_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.log")
+VALIDATED_CSV = os.path.join(DATA_DIR, f"validated_grants{datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S')}.csv")
+LOG_FILE = os.path.join(DATA_DIR, f"pipeline-run_{datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S')}.log")
 
 
 os.makedirs(DATA_DIR, exist_ok=True)
