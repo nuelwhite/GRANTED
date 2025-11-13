@@ -203,3 +203,44 @@ def save_to_csv(valid_records: list, invalid_records: list):
         append_invalid = os.path.exists(invalid_path)
         df_invalid.to_csv(invalid_path, mode="a", header=not append_invalid, index=False)
         logging.warning(f"{len(invalid_records)} invalid records logged in {invalid_path}")
+
+
+def run_pipeline():
+    """
+    Full end-to-end process:
+    1. Loop through URLs
+    2. Extract via Gemini
+    3. Parse + Validate
+    4. Save valid data
+    """
+    all_valid, all_invalid = [], []
+    total = len(SOURCES)
+    logging.info(f"Starting batch extraction for {total} sources.")
+
+    for i, url in enumerate(SOURCES, start=1):
+        logging.info(f"\n---- [{i}/{total}] Processing {url} ----")
+
+        raw_json = extract_from_gemini(url)
+        valid, invalid = parse_and_validate(raw_json, url)
+
+        all_valid.extend(valid)
+        all_invalid.extend(invalid)
+
+        # (Optional) store raw responses for debugging
+        if raw_json:
+            with open(RAW_OUTPUT_PATH, "a", encoding="utf-8") as f:
+                f.write(json.dumps({"url": url, "response": raw_json}) + "\n")
+
+        time.sleep(2)  # slight delay for rate limits
+
+    save_to_csv(all_valid, all_invalid)
+
+    logging.info("=== Extraction Complete ===")
+    logging.info(f"Total URLs processed: {total}")
+    logging.info(f"Valid grants: {len(all_valid)}")
+    logging.info(f"Invalid grants: {len(all_invalid)}")
+    logging.info(f"Output file: {VALIDATED_CSV}")
+
+
+if __name__ == "__main__":
+    run_pipeline()
