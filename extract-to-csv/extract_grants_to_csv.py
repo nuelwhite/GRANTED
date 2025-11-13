@@ -178,3 +178,28 @@ def parse_and_validate(raw_json: str, source_url: str):
 
     return valid_records, invalid_records
 
+
+
+def save_to_csv(valid_records: list, invalid_records: list):
+    """
+    Appends validated grant data to validated_grants.csv
+    and logs invalid ones separately if needed.
+    """
+    if not valid_records:
+        logging.warning("No valid records to save.")
+        return
+
+    df = pd.DataFrame(valid_records)
+
+    # Append to existing CSV if it exists, else create new
+    write_header = not os.path.exists(VALIDATED_CSV)
+    df.to_csv(VALIDATED_CSV, mode="a", header=write_header, index=False, encoding="utf-8")
+    logging.info(f"Saved {len(valid_records)} validated records to {VALIDATED_CSV}")
+
+    # Optionally, store invalids to a separate file
+    if invalid_records:
+        invalid_path = os.path.join(DATA_DIR, "invalid_records.csv")
+        df_invalid = pd.DataFrame(invalid_records)
+        append_invalid = os.path.exists(invalid_path)
+        df_invalid.to_csv(invalid_path, mode="a", header=not append_invalid, index=False)
+        logging.warning(f"{len(invalid_records)} invalid records logged in {invalid_path}")
