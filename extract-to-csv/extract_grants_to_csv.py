@@ -1,13 +1,14 @@
 import os
 import json
 import pandas as pd
-import pydantic
+from pydantic import BaseModel, Field
 import logging
 from datetime import datetime
 from dotenv import load_dotenv
 import time
 import random
 from google import genai
+from schema import GrantData
 
 
 ## ---1. CONFIGURATION
@@ -139,3 +140,41 @@ def extract_from_gemini(url, retries = 3, backoff = 2.0):
             time.sleep(wait)
     logging.error(f"All attempts failed for: {url}")
     return None
+
+
+def parse_and_validate(raw_json: str, source_url: str):
+    """
+    Parse Gemini's JSON response and validate each record using GrantSchema.
+    Returns (valid_records, invalid_records)
+    """
+    valid_records, invalid_records = [], []
+
+    if not raw_json:
+        logging.warning(f"No content returned for {source_url}")
+        return valid_records, invalid_records
+
+    try:
+        parsed = json.loads(raw_json)
+    except json.JSONDecodeError as e:
+        logging.error(f"JSON parsing error for {source_url}: {e}")
+        return valid_records, invalid_records
+
+    # Handle both single objects and arrays
+    if isinstance(parsed, dict):
+        parsed = [parsed]
+    elif not isinstance(parsed, list):
+        logging.warning(f"Unexpected JSON structure for {source_url}")
+        return valid_records, invalid_records
+
+    for item in parsed:
+        # Always add source URL for traceability
+        item["source_url"] = source_url
+        try:
+            validated = GrantData(**item)
+            valid_records.append(validated.dict())
+        except Exception as e:
+            logging.warning(f"Validation failed for {source_url}: {e}")
+            invalid_records.append({"source_url": source_url, "error": str(e)})
+
+    return valid_records, invalid_records
+
