@@ -112,3 +112,30 @@ Guidelines:
 - Return *only* valid JSON — no text outside the JSON structure.
 """
 
+
+
+def extract_from_gemini(url, retries = 3, backoff = 2.0):
+    """
+    Handles the API call with retry/backoff.
+    Returns parsed JSON text or None on failure.
+    """
+    prompt = build_prompt(url)
+    for attempt in range(1, retries + 1):
+        try:
+            logging.info(f"Extracting from {url} (attempt {attempt}/{retries})")
+            response = client.models.generate_content(
+                model=MODEL_NAME,
+                contents=prompt,
+                config=genai.types.GenerateContentConfig(
+                    temperature=TEMPERATURE,
+                    max_output_tokens=MAX_TOKENS,
+                    response_mime_type="application/json",
+                ),
+            )
+            return response.text  # raw JSON string from Gemini
+        except Exception as e:
+            wait = backoff * (2 ** (attempt - 1)) + random.uniform(0, 1)
+            logging.warning(f"Gemini request failed: {e}. Retrying in {wait:.1f}s...")
+            time.sleep(wait)
+    logging.error(f"All attempts failed for: {url}")
+    return None
