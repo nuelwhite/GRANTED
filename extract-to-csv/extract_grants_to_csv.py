@@ -3,32 +3,39 @@ import json
 import pandas as pd
 from pydantic import BaseModel, Field
 import logging
-from datetime import datetime
+from typing import Optional
+from datetime import datetime, UTC
 from dotenv import load_dotenv
 import time
 import random
 from google import genai
-from schema import GrantData
-
+from schema import GrantData # Import the updated Pydantic model
+from typing import Optional, List, Dict, Any # Added missing import
 
 ## ---1. CONFIGURATION
 # LOAD ENVIRONMENT VARIABLES
 load_dotenv()
 
-API_KEY = os.getenv("GEMINI_API_KEY")
+# The API key is now correctly loaded from the environment by the user's setup.
+API_KEY = os.getenv("GEMINI_API_KEY") 
 if not API_KEY:
-    raise ValueError("No GEMINI API KEY found in .env file!")
+    logging.error("No GEMINI API KEY found in .env file! Ensure it is set for successful execution.")
 
 
 # directory setup
 CONFIG_PATH = "config/sources_list.json"
-DATA_DIR = "data"
+DATA_DIR = "data/processed"
+LOG = 'data/log'
 RAW_OUTPUT_DIR = os.path.join(DATA_DIR, "raw_output.jsonl")
-VALIDATED_CSV = os.path.join(DATA_DIR, f"validated_grants{datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S')}.csv")
-LOG_FILE = os.path.join(DATA_DIR, f"pipeline-run_{datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S')}.log")
+
+# Using UTC time for robust timestamping (addresses DeprecationWarning)
+now_utc = datetime.now(UTC).strftime('%Y-%m-%d_%H-%M-%S')
+VALIDATED_CSV = os.path.join(DATA_DIR, f"validated_grants_{now_utc}.csv")
+LOG_FILE = os.path.join(LOG, f"pipeline-run_{now_utc}.log")
 
 
 os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(LOG, exist_ok=True)
 
 
 # configure logging
@@ -41,9 +48,6 @@ logging.basicConfig(
 logging.getLogger().addHandler(logging.StreamHandler())
 
 logging.info("=== GRANT EXTRACTION PIPELINE INITIALIZED ===")
-logging.info(f"Log file: {LOG_FILE}")
-logging.info(f"Config path: {CONFIG_PATH}")
-logging.info(f"Data directory: {DATA_DIR}")
 
 
 #load sources
@@ -52,7 +56,7 @@ try:
         SOURCES = json.load(f).get("sources", [])
         logging.info(f"Loaded {len(SOURCES)} sources from {CONFIG_PATH}")
 except FileNotFoundError:
-    logging.error(f"Sources file not found at {CONFIG_PATH}")
+    logging.error(f"Sources file not found at {CONFIG_PATH}. Please ensure '{CONFIG_PATH}' exists.")
     SOURCES = []
 
 if not SOURCES:
@@ -61,82 +65,123 @@ if not SOURCES:
 
 # Initialize Gemini Client
 client = genai.Client(api_key=API_KEY)
-MODEL_NAME = "gemini-2.0-flash"       
-TEMPERATURE = 0.3          
-MAX_TOKENS = 4096  
+MODEL_NAME = "gemini-2.5-flash" 
+TEMPERATURE = 0.3              
+MAX_TOKENS = 4096 
 
 
 def build_prompt(url: str) -> str:
-    return f"""
-You are a grant data extraction assistant for an AI-powered funding platform.
-
-Go to the webpage: {url}
-
-If the page lists **multiple grants or programs**, extract ALL of them as an array of JSON objects.
-If it describes **a single grant**, return one JSON object.
-
-Each grant must follow this structure exactly:
-{{
-  "grant_id": "",
-  "title": "",
-  "description": "",
-  "funder": "",
-  "funder_type": "",
-  "funding_type": "",
-  "amount_min": null,
-  "amount_max": null,
-  "currency": "",
-  "deadline": "",
-  "application_complexity": "",
-  "eligible_provinces": [],
-  "geography_details": "",
-  "eligible_applicant_type": [],
-  "eligible_industries": [],
-  "target_beneficiaries": [],
-  "supported_project_types": [],
-  "sdg_alignment": [],
-  "application_url": "",
-  "is_recurring": false,
-  "notes": ""
-}}
-
-Guidelines:
-- When processing a portal page, extract **all grant programs listed**, not just the first.
-- The 'description' must include full context, purpose, eligibility, and funding details — as detailed as possible.
-- Use factual, well-structured text. Never invent information.
-- Return *only valid JSON* — no markdown or text outside JSON.
-"""
-
-
-
-def extract_from_gemini(url, retries = 3, backoff = 2.0):
+    # We explicitly embed the expected JSON structure in the prompt now.
+    schema_definition = """
+[
+    {
+        "grant_id": "Unique identifier for the grant (e.g., GOV_AB_2025_001).",
+        "title": "The full, official title of the grant program.",
+        "description": "Crucial: The full, detailed description including purpose, eligibility, and funding details.",
+        "funder": "The name of the organization offering the grant.",
+        "funder_type": "The type of funder (e.g., 'Federal Grant', 'Foundation Grant').",
+        "funding_type": "Nature of the funding (e.g., 'Grant', 'Loan').",
+        "amount_min": 100000,
+        "amount_max": 5000000,
+        "currency": "The three-letter currency code (e.g., 'CAD', 'USD').",
+        "deadline": "The application deadline, formatted as 'YYYY-MM-DD' or 'Ongoing'.",
+        "application_complexity": "Estimated complexity (e.g., 'Low', 'Medium', 'High').",
+        "eligible_provinces": ["List of eligible regions/states. Use ['National'] if nationwide."],
+        "geography_details": "Any specific local or regional restrictions.",
+        "eligible_applicant_type": ["List of organization types (e.g., 'Small Business', 'Non-profit')."],
+        "eligible_industries": ["List of specific industries or sectors."],
+        "target_beneficiaries": ["List of groups supported (e.g., 'Youth', 'Women-owned businesses')."],
+        "supported_project_types": ["List of projects funded (e.g., 'R&D', 'Equipment Purchase')."],
+        "sdg_alignment": ["List of UN SDGs the grant aligns with."],
+        "application_url": "Direct URL to the primary application page or program details.",
+        "is_recurring": true,
+        "notes": "Any essential caveats or additional information.",
+        "application_questions_link": "Direct URL to the FAQ/contact page (or null).",
+        "application_package_link": "Direct URL to downloadable application forms (or null)."
+    }
+]
     """
-    Handles the API call with retry/backoff.
-    Returns parsed JSON text or None on failure.
+    
+    return f"""
+    You are an expert grant data extraction assistant.
+
+    **Action:** Visit the webpage at: {url}
+    **Task:** Extract ALL grant programs listed on the page.
+
+    **Formatting Rules:**
+    1.  Return **ONLY THE VALID JSON ARRAY/OBJECT** — do not include any markdown, commentary, or text outside the JSON structure.
+    2.  The JSON structure MUST strictly adhere to the following schema definition. Use **EXACTLY** these field names:
+
+    SCHEMA REFERENCE (Use exactly these field names, filling required data):
+    {schema_definition}
+
+    **Content Rules:**
+    -   If the page lists multiple grants, return an array of JSON objects.
+    -   The 'description' must be highly detailed, including full context, purpose, eligibility, and funding details.
+    
+    ***
+    **MONEY VALUE RULE:**
+    For the fields `amount_min` and `amount_max`:
+    1.  You **MUST** report the monetary amount in the **major currency unit** (e.g., Dollars, Euros).
+    2.  The final value in the JSON MUST be a pure integer (no decimals). If the source includes cents, round down to the nearest whole unit.
+    3.  **Example:** If the grant amount is $10,000.00, `amount_max` should be 10000.
+    ***
+    
+    -   For list fields (e.g., eligible_provinces), always return a JSON array ([]), even if empty or only containing one item.
+    """
+
+
+def extract_from_gemini(url: str, retries: int = 3, backoff: float = 2.0) -> Optional[str]:
+    """
+    Handles the API call with retry/backoff, and CRITICALLY, enables Google Search Grounding.
+    The response_mime_type and response_schema are REMOVED to avoid the 400 error.
+    Returns raw JSON text or None on failure.
     """
     prompt = build_prompt(url)
+    
+    # We no longer pass the schema in config, but rely on the prompt text instruction
+    # to guide the model's output structure.
+    
     for attempt in range(1, retries + 1):
         try:
             logging.info(f"Extracting from {url} (attempt {attempt}/{retries})")
+            
+            # The prompt now contains the full schema definition
             response = client.models.generate_content(
                 model=MODEL_NAME,
                 contents=prompt,
                 config=genai.types.GenerateContentConfig(
                     temperature=TEMPERATURE,
                     max_output_tokens=MAX_TOKENS,
-                    response_mime_type="application/json",
+                    # This tool enables web access (Grounding)
+                    tools=[{"google_search": {}}], 
                 ),
             )
-            return response.text  # raw JSON string from Gemini
+            
+            # Since we removed the JSON mime type, the model might wrap the JSON in ```json...```
+            # We must strip any markdown formatting before returning the raw JSON string.
+            raw_text = response.text.strip()
+            if raw_text.startswith("```json"):
+                raw_text = raw_text.strip("```json").strip("```").strip()
+            
+            # CRITICAL FIX: Clean up illegal control characters/non-standard whitespace
+            # This fixes "Invalid control character" errors caused by LLM-generated whitespace
+            # like non-breaking spaces (\u00a0).
+            raw_text = raw_text.replace('\u00a0', ' ')
+            raw_text = raw_text.replace('\u200b', '') # Zero-width space
+            
+            return raw_text
+        
         except Exception as e:
             wait = backoff * (2 ** (attempt - 1)) + random.uniform(0, 1)
             logging.warning(f"Gemini request failed: {e}. Retrying in {wait:.1f}s...")
             time.sleep(wait)
+            
     logging.error(f"All attempts failed for: {url}")
     return None
 
 
-def parse_and_validate(raw_json: str, source_url: str):
+def parse_and_validate(raw_json: str, source_url: str) -> tuple[list, list]:
     """
     Parse Gemini's JSON response and validate each record using GrantSchema.
     Returns (valid_records, invalid_records)
@@ -150,7 +195,8 @@ def parse_and_validate(raw_json: str, source_url: str):
     try:
         parsed = json.loads(raw_json)
     except json.JSONDecodeError as e:
-        logging.error(f"JSON parsing error for {source_url}: {e}")
+        # Increased error logging to help debug malformed JSON from the LLM
+        logging.error(f"JSON parsing error for {source_url}: {e} (Raw: {raw_json[:500]}...)")
         return valid_records, invalid_records
 
     # Handle both single objects and arrays
@@ -169,11 +215,12 @@ def parse_and_validate(raw_json: str, source_url: str):
             item["grant_id"] = f"{funder_base}_{int(time.time())}_{random.randint(100,999)}"
 
         try:
+            # Pydantic validation
             validated = GrantData(**item)
             valid_records.append(validated.model_dump())
         except Exception as e:
-            logging.warning(f"Validation failed for {source_url}: {e}")
-            invalid_records.append({"source_url": source_url, "error": str(e)})
+            logging.warning(f"Validation failed for {source_url} (ID: {item.get('grant_id', 'N/A')}): {e}")
+            invalid_records.append({"source_url": source_url, "error": str(e), "data_preview": item})
 
     return valid_records, invalid_records
 
@@ -181,7 +228,7 @@ def parse_and_validate(raw_json: str, source_url: str):
 def quality_check(grant: dict) -> bool:
     """
     Returns True if grant passes quality checks,
-    False if it needs manual review.
+    False if it needs manual review. (Logic remains the same)
     """
     # Condition 1 — missing max amount
     if not grant.get("amount_max"):
@@ -201,8 +248,7 @@ def quality_check(grant: dict) -> bool:
     return True
 
 
-
-def enrich_grant_text(description: str, notes: str):
+def enrich_grant_text(description: str, notes: str) -> tuple[str, list]:
     """
     Uses Gemini to generate a concise summary and list of keywords for faster AI matching.
     """
@@ -243,17 +289,42 @@ def enrich_grant_text(description: str, notes: str):
         return "", []
 
 
+def format_list_fields(record: dict) -> dict:
+    """
+    Converts list-based fields into semi-column separated strings for CSV export.
+    """
+    list_fields = [
+        "eligible_provinces", 
+        "eligible_applicant_type", 
+        "eligible_industries", 
+        "target_beneficiaries", 
+        "supported_project_types", 
+        "sdg_alignment"
+    ]
+    
+    for field in list_fields:
+        if isinstance(record.get(field), list):
+            # Join the list elements with a semi-colon and space
+            record[field] = "; ".join(str(item) for item in record[field])
+        elif record.get(field) is None:
+             # Ensure empty list fields are represented as empty strings in CSV
+            record[field] = ""
+            
+    return record
+
 
 def save_to_csv(valid_records: list, invalid_records: list):
     """
-    Appends validated grant data to validated_grants.csv
+    Appends validated grant data to the validated_grants.csv
     and logs invalid ones separately if needed.
     """
     if not valid_records:
         logging.warning("No valid records to save.")
         return
 
-    df = pd.DataFrame(valid_records)
+    # Apply CSV formatting transformation
+    transformed_records = [format_list_fields(record) for record in valid_records]
+    df = pd.DataFrame(transformed_records)
 
     # Append to existing CSV if it exists, else create new
     write_header = not os.path.exists(VALIDATED_CSV)
@@ -269,18 +340,20 @@ def save_to_csv(valid_records: list, invalid_records: list):
         logging.warning(f"{len(invalid_records)} invalid records logged in {invalid_path}")
 
 
-
 def load_processed_urls():
     """
     Load URLs that have already been successfully processed to avoid duplication.
     """
-    if not os.path.exists(VALIDATED_CSV):
+    # Use a static name for the CSV here so we can check past runs
+    static_csv_name = os.path.join(DATA_DIR, "validated_grants.csv")
+    if not os.path.exists(static_csv_name):
         return set()
 
     try:
-        df = pd.read_csv(VALIDATED_CSV, usecols=["source_url"])
+        df = pd.read_csv(static_csv_name, usecols=["source_url"], dtype={'source_url': str})
         return set(df["source_url"].dropna().tolist())
-    except Exception:
+    except Exception as e:
+        logging.error(f"Error loading processed URLs: {e}")
         return set()
 
 
@@ -288,11 +361,16 @@ def run_pipeline():
     """
     Full end-to-end process:
     1. Loop through URLs
-    2. Extract via Gemini
+    2. Extract via Gemini (now with grounding)
     3. Parse + Validate
     4. Enrich (summary + keywords)
-    5. Save valid + invalid data
+    5. Save valid + invalid data (now with CSV list formatting)
     """
+    global client # Ensure client is globally accessible
+    if not API_KEY:
+        logging.error("Pipeline cannot run without API Key.")
+        return
+
     all_valid, all_invalid = [], []
     total = len(SOURCES)
     processed = load_processed_urls()
@@ -318,7 +396,9 @@ def run_pipeline():
 
         # 3. Enrich each valid grant
         for grant in valid:
-            summary, keywords = enrich_grant_text(grant["description"], grant["notes"])
+            # We use a separate LLM call for enrichment, which CAN use structured output 
+            # because it does NOT use the Google Search tool.
+            summary, keywords = enrich_grant_text(grant["description"], grant["notes"]) 
 
             # Construct enriched notes
             enriched_note = f"{grant['notes'].strip()}\n\n---\nSummary: {summary}\nKeywords: {', '.join(keywords)}"
@@ -345,7 +425,8 @@ def run_pipeline():
 
     if manual_review:
         review_path = os.path.join(DATA_DIR, "manual_review.csv")
-        df_review = pd.DataFrame(manual_review)
+        # Apply formatting for the review file too
+        df_review = pd.DataFrame([format_list_fields(r) for r in manual_review])
         append_review = os.path.exists(review_path)
         df_review.to_csv(review_path, mode="a", header=not append_review, index=False, encoding="utf-8")
         logging.warning(f"{len(manual_review)} records moved to manual review at {review_path}")
@@ -356,7 +437,6 @@ def run_pipeline():
     logging.info(f"Valid grants: {len(all_valid)}")
     logging.info(f"Invalid grants: {len(all_invalid)}")
     logging.info(f"Output file: {VALIDATED_CSV}")
-
 
 
 if __name__ == "__main__":
