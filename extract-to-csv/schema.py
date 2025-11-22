@@ -22,7 +22,8 @@ class GrantData(BaseModel):
     target_beneficiaries: List[str] = Field(description="(Crucial for matching) List of groups the grant is intended to support (e.g., 'Youth', 'Women-owned businesses').")
     supported_project_types: List[str] = Field(description="List of projects the grant can fund (e.g., 'R&D', 'Equipment Purchase', 'Training').")
     sdg_alignment: List[str] = Field(description="List of UN Sustainable Development Goals the grant aligns with.")
-    application_url: str = Field(description="Direct URL to the application page or program details.")
+    application_url: str = Field(description="Direct URL to the primary application page or program details.")
     is_recurring: bool = Field(description="True if the grant is offered on a regular cycle (e.g., annually), False otherwise.")
     notes: str = Field(description="Any essential caveats or additional information.")
-    
+    application_questions_link: Optional[str] = Field(None, description="Direct URL to the FAQ, question guide, or contact page for application inquiries.")
+    application_package_link: Optional[str] = Field(None, description="Direct URL to downloadable application forms, package, or guide documents.")
