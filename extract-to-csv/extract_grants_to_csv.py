@@ -16,7 +16,7 @@ from typing import Optional, List, Dict, Any # Added missing import
 # LOAD ENVIRONMENT VARIABLES
 load_dotenv()
 
-# The API key is now correctly loaded from the environment by the user's setup.
+# Load API key.
 API_KEY = os.getenv("GEMINI_API_KEY") 
 if not API_KEY:
     logging.error("No GEMINI API KEY found in .env file! Ensure it is set for successful execution.")
@@ -71,7 +71,7 @@ MAX_TOKENS = 4096
 
 
 def build_prompt(url: str) -> str:
-    # We explicitly embed the expected JSON structure in the prompt now.
+    # define schema for data generation (JSON)
     schema_definition = """
 [
     {
@@ -139,9 +139,6 @@ def extract_from_gemini(url: str, retries: int = 3, backoff: float = 2.0) -> Opt
     """
     prompt = build_prompt(url)
     
-    # We no longer pass the schema in config, but rely on the prompt text instruction
-    # to guide the model's output structure.
-    
     for attempt in range(1, retries + 1):
         try:
             logging.info(f"Extracting from {url} (attempt {attempt}/{retries})")
@@ -158,17 +155,13 @@ def extract_from_gemini(url: str, retries: int = 3, backoff: float = 2.0) -> Opt
                 ),
             )
             
-            # Since we removed the JSON mime type, the model might wrap the JSON in ```json...```
-            # We must strip any markdown formatting before returning the raw JSON string.
+            # process extracted data
             raw_text = response.text.strip()
             if raw_text.startswith("```json"):
                 raw_text = raw_text.strip("```json").strip("```").strip()
             
-            # CRITICAL FIX: Clean up illegal control characters/non-standard whitespace
-            # This fixes "Invalid control character" errors caused by LLM-generated whitespace
-            # like non-breaking spaces (\u00a0).
             raw_text = raw_text.replace('\u00a0', ' ')
-            raw_text = raw_text.replace('\u200b', '') # Zero-width space
+            raw_text = raw_text.replace('\u200b', '')
             
             return raw_text
         
@@ -195,7 +188,6 @@ def parse_and_validate(raw_json: str, source_url: str) -> tuple[list, list]:
     try:
         parsed = json.loads(raw_json)
     except json.JSONDecodeError as e:
-        # Increased error logging to help debug malformed JSON from the LLM
         logging.error(f"JSON parsing error for {source_url}: {e} (Raw: {raw_json[:500]}...)")
         return valid_records, invalid_records
 
@@ -230,14 +222,14 @@ def quality_check(grant: dict) -> bool:
     Returns True if grant passes quality checks,
     False if it needs manual review. (Logic remains the same)
     """
-    # Condition 1 — missing max amount
+    # Condition 1 — check for missing max amount
     if not grant.get("amount_max"):
         return False
 
-    # Condition 2 — empty critical fields
+    # Condition 2 — check for empty critical fields
     critical_fields = ["title", "description", "funder", "application_url"]
     empty_count = sum(1 for f in critical_fields if not grant.get(f))
-    if empty_count > 1:  # more than one critical field empty
+    if empty_count > 1: 
         return False
 
     # Condition 3 — description too short or generic
@@ -302,12 +294,11 @@ def format_list_fields(record: dict) -> dict:
         "sdg_alignment"
     ]
     
+    #process list fields - join field data with semi-colon, and empty "" when there is no data
     for field in list_fields:
         if isinstance(record.get(field), list):
-            # Join the list elements with a semi-colon and space
             record[field] = "; ".join(str(item) for item in record[field])
         elif record.get(field) is None:
-             # Ensure empty list fields are represented as empty strings in CSV
             record[field] = ""
             
     return record
@@ -397,7 +388,6 @@ def run_pipeline():
         # 3. Enrich each valid grant
         for grant in valid:
             # We use a separate LLM call for enrichment, which CAN use structured output 
-            # because it does NOT use the Google Search tool.
             summary, keywords = enrich_grant_text(grant["description"], grant["notes"]) 
 
             # Construct enriched notes
