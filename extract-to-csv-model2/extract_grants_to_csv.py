@@ -398,11 +398,35 @@ def extract_from_gemini(url: str, retries: int = 3, backoff: float = 2.0) -> Opt
                 if match:
                     raw_text = match.group(1)
             
-            # Save raw response with unique filename based on URL
-            # Create a safe filename from the URL
-            safe_filename = re.sub(r'[^\w\-_]', '_', url.split('//')[1] if '//' in url else url)
-            safe_filename = safe_filename[:100]  # Limit length
-            debug_file = os.path.join(DATA_DIR, f"raw_response_{safe_filename}_{int(time.time())}.json")
+            # Create a clean, readable filename from the URL
+            # Extract domain and path parts
+            url_parts = url.replace('https://', '').replace('http://', '').split('/')
+            domain = url_parts[0].replace('www.', '')
+            path_parts = [p for p in url_parts[1:] if p and p not in ['funding', 'grants', 'programs', 'application']]
+            
+            # Take last 2-3 meaningful parts of the path
+            meaningful_parts = path_parts[-3:] if len(path_parts) >= 3 else path_parts
+            
+            # Create clean filename
+            if meaningful_parts:
+                safe_name = '-'.join(meaningful_parts)
+            else:
+                safe_name = domain.split('.')[0]  # Use first part of domain if no path
+            
+            # Clean the name
+            safe_name = re.sub(r'[^\w\-]', '-', safe_name)
+            safe_name = re.sub(r'-+', '-', safe_name)  # Replace multiple dashes with single
+            safe_name = safe_name.strip('-')[:80]  # Limit length and remove trailing dashes
+            
+            # Add date
+            date_str = datetime.now(UTC).strftime('%Y-%m-%d')
+            debug_file = os.path.join(DATA_DIR, f"{safe_name}_{date_str}.json")
+            
+            # If file exists, add a counter
+            counter = 1
+            while os.path.exists(debug_file):
+                debug_file = os.path.join(DATA_DIR, f"{safe_name}_{date_str}_{counter}.json")
+                counter += 1
             
             with open(debug_file, "w", encoding="utf-8") as f:
                 f.write(raw_text)
