@@ -61,7 +61,7 @@ Basic extraction pipeline with flat schema. Superseded by V2's more robust neste
 
 Ambitious multi-stage pipeline design with Google Drive integration, automated scheduling, and advanced monitoring. Design proved too complex for initial implementation but kept for reference and potential future enhancements.
 
-[View Design Document](semi-auto-sys/DESIGN.md)
+[View Design Document](semi-auto-system/DESIGN.md)
 
 ## Repository Structure
 
