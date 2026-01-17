@@ -460,7 +460,7 @@ def validate_enum_array(values: List[str], valid_values: List[str], field_name: 
     
     # Mapping dictionaries for common variations
     sector_mappings = {
-        # Health/Medical
+        # Health/Medical/Life Sciences
         "HEALTHCARE": "HEALTH",
         "HEALTHCARE TECHNOLOGY": "HEALTH",
         "DIGITAL HEALTH": "HEALTH",
@@ -483,7 +483,9 @@ def validate_enum_array(values: List[str], valid_values: List[str], field_name: 
         "BIOTECHNOLOGY": "HEALTH",
         "PHARMA": "HEALTH",
         "PHARMACEUTICAL": "HEALTH",
-        # Technology
+        "LIFE SCIENCES": "HEALTH",
+        "LIFE_SCIENCES": "HEALTH",
+        # Technology/Digital
         "ARTIFICIAL INTELLIGENCE": "TECHNOLOGY",
         "MACHINE LEARNING": "TECHNOLOGY",
         "DATA ANALYTICS": "TECHNOLOGY",
@@ -493,16 +495,23 @@ def validate_enum_array(values: List[str], valid_values: List[str], field_name: 
         "SOFTWARE": "TECHNOLOGY",
         "IT": "TECHNOLOGY",
         "INFORMATION TECHNOLOGY": "TECHNOLOGY",
-        # Energy
+        "INFORMATION_TECHNOLOGY": "TECHNOLOGY",
+        "DIGITAL ECONOMY": "TECHNOLOGY",
+        "DEEP TECH": "TECHNOLOGY",
+        "INNOVATION": "TECHNOLOGY",
+        "CLIMATE TECH": "ENERGY",
+        # Energy/CleanTech
         "CLEANTECH": "ENERGY",
         "CLEAN TECHNOLOGY": "ENERGY",
-        # Agriculture
+        # Agriculture/Food
         "AGTECH": "AGRICULTURE",
+        "AGRI-FOOD": "AGRICULTURE",
+        "AGRI_FOOD": "AGRICULTURE",
         # Finance
         "FINTECH": "FINANCE",
         # Education
         "EDTECH": "EDUCATION",
-        # Arts & Culture - NEW
+        # Arts & Culture
         "ARTS": "CREATIVE",
         "CULTURE": "CREATIVE",
         "ARTS AND CULTURE": "CREATIVE",
@@ -513,68 +522,124 @@ def validate_enum_array(values: List[str], valid_values: List[str], field_name: 
         "CRAFT": "CREATIVE",
         "DESIGN": "CREATIVE",
         "COMMUNITY ARTS": "CREATIVE",
+        "CREATIVE INDUSTRIES": "CREATIVE",
+        "CREATIVE ARTS": "CREATIVE",
+        # Hospitality/Tourism
+        "TOURISM": "HOSPITALITY",
+        # Manufacturing/Materials
+        "ADVANCED MATERIALS": "MANUFACTURING",
+        # Science/Research/Academia
+        "SCIENCE": "TECHNOLOGY",
+        "ENGINEERING": "TECHNOLOGY",
+        "SOCIAL SCIENCES": "SOCIAL_SERVICES",
+        "HUMANITIES": "EDUCATION",
+        # Business/General
+        "EXPORT-ORIENTED BUSINESSES": "OPEN_TO_ALL",
+        "GENERAL BUSINESS INNOVATION": "OPEN_TO_ALL",
     }
     
     purpose_mappings = {
+        # Research & Development
         "INNOVATION": "RESEARCH",
         "RESEARCH_AND_DEVELOPMENT": "RESEARCH",
         "R&D": "RESEARCH",
+        "RESEARCH & DEVELOPMENT": "RESEARCH",
+        "VALIDATION": "RESEARCH",
+        "CLINICAL_TRIALS": "RESEARCH",
+        "PROOF_OF_CONCEPT": "RESEARCH",
+        # Product Development
         "COMMERCIALIZATION": "PRODUCT_DEVELOPMENT",
+        "PROTOTYPING": "PRODUCT_DEVELOPMENT",
+        "PRODUCT DEVELOPMENT": "PRODUCT_DEVELOPMENT",
+        "PRODUCT_DEVELOPMENT": "PRODUCT_DEVELOPMENT",
+        # Business Growth & Operations
+        "BUSINESS_GROWTH": "OPERATIONAL",
+        "BUSINESS GROWTH": "OPERATIONAL",
+        "OPERATING SUPPORT": "OPERATIONAL",
+        "PROGRAM DELIVERY": "OPERATIONAL",
+        "BUSINESS_DEVELOPMENT": "OPERATIONAL",
+        "BUSINESS DEVELOPMENT": "OPERATIONAL",
+        "PRODUCTIVITY IMPROVEMENT": "OPERATIONAL",
+        "ECONOMIC DEVELOPMENT": "OPERATIONAL",
+        # Expansion & Scaling
         "PILOT_PROJECTS": "RESEARCH",
         "SCALING_UP": "PROGRAM_EXPANSION",
         "SCALE_UP": "PROGRAM_EXPANSION",
-        "HEALTH_SYSTEM_IMPROVEMENT": "CAPACITY_BUILDING",
-        "BUSINESS_GROWTH": "OPERATIONAL",
         "EXPANSION": "PROGRAM_EXPANSION",
+        "MARKET_EXPANSION": "MARKETING",
+        "MARKET EXPANSION": "MARKETING",
+        "MARKET ENTRY & EXPANSION": "MARKETING",
+        "EXPORT_DEVELOPMENT": "MARKETING",
+        # Capacity & Training
+        "HEALTH_SYSTEM_IMPROVEMENT": "CAPACITY_BUILDING",
+        "CAPACITY BUILDING": "CAPACITY_BUILDING",
+        "CAPACITY_BUILDING": "CAPACITY_BUILDING",
+        "PROFESSIONAL DEVELOPMENT": "TRAINING",
+        # Technology & Digital
         "TECHNOLOGY_ADOPTION": "TECHNOLOGY",
         "TECH_ADOPTION": "TECHNOLOGY",
         "DIGITAL_ADOPTION": "TECHNOLOGY",
-        "VALIDATION": "RESEARCH",
-        "CLINICAL_TRIALS": "RESEARCH",
-        "PROTOTYPING": "PRODUCT_DEVELOPMENT",
-        "PROOF_OF_CONCEPT": "RESEARCH",
+        "TECHNOLOGY ADOPTION": "TECHNOLOGY",
+        # Marketing & Market Access
         "MARKET_ACCESS": "MARKETING",
-        "BUSINESS_DEVELOPMENT": "OPERATIONAL",
-        # NEW - Arts & Community
-        "OPERATING SUPPORT": "OPERATIONAL",
-        "CAPACITY BUILDING": "CAPACITY_BUILDING",
-        "PROGRAM DELIVERY": "OPERATIONAL",
+        "MARKET ACCESS": "MARKETING",
+        # Community & Engagement
         "ARTS AND CULTURE": "COMMUNITY_ENGAGEMENT",
-        "PROFESSIONAL DEVELOPMENT": "TRAINING",
         "COMMUNITY DEVELOPMENT": "COMMUNITY_ENGAGEMENT",
+        # Job Creation
+        "JOB CREATION": "HIRING",
     }
     
     equity_mappings = {
+        # Black/BIPOC/Racialized
         "BLACK-LED": "BIPOC_LED",
         "BLACK LED": "BIPOC_LED",
+        "BLACK": "BIPOC_LED",
         "RACIALIZED COMMUNITIES": "BIPOC_LED",
         "RACIALIZED GROUPS": "BIPOC_LED",
-        "BLACK": "BIPOC_LED",
+        "VISIBLE_MINORITY": "BIPOC_LED",
+        "VISIBLE MINORITY": "BIPOC_LED",
+        "MINORITY": "MINORITY_LED",
+        "MINORITY-LED": "MINORITY_LED",
+        "MINORITY LED": "MINORITY_LED",
+        # Indigenous
         "INDIGENOUS": "INDIGENOUS",
+        "INDIGENOUS_PEOPLE": "INDIGENOUS",
+        "INDIGENOUS PEOPLE": "INDIGENOUS",
+        # Women
         "WOMEN-LED": "WOMEN_LED",
         "WOMEN LED": "WOMEN_LED",
+        "WOMEN": "WOMEN_LED",
+        # LGBTQ+
         "LGBTQ": "LGBTQ_PLUS",
         "LGBTQ+": "LGBTQ_PLUS",
+        "LGBTQ2S+": "LGBTQ_PLUS",
+        "LGBTQ2S": "LGBTQ_PLUS",
+        # Disability
+        "DISABLED": "DISABLED",
+        "DISABILITY": "DISABLED",
+        "PEOPLE_WITH_DISABILITIES": "DISABLED",
+        "PEOPLE WITH DISABILITIES": "DISABLED",
+        # Geographic
         "RURAL": "RURAL",
         "URBAN": "URBAN",
         "REMOTE": "REMOTE",
+        # Age
         "YOUTH": "YOUTH",
         "SENIOR": "SENIOR",
         "SENIORS": "SENIOR",
-        "VETERAN": "VETERAN",
-        "VETERANS": "VETERAN",
-        "DISABLED": "DISABLED",
-        "DISABILITY": "DISABLED",
+        # Immigration/Refugee
         "IMMIGRANT": "IMMIGRANT",
         "IMMIGRANTS": "IMMIGRANT",
         "REFUGEE": "REFUGEE",
         "REFUGEES": "REFUGEE",
+        # Veterans
+        "VETERAN": "VETERAN",
+        "VETERANS": "VETERAN",
+        # Economic
         "LOW-INCOME": "LOW_INCOME",
         "LOW INCOME": "LOW_INCOME",
         "UNDERSERVED": "UNDERSERVED",
-        "MINORITY": "MINORITY_LED",
-        "MINORITY-LED": "MINORITY_LED",
-        "MINORITY LED": "MINORITY_LED",
     }
     
     # Choose the right mapping based on field name
