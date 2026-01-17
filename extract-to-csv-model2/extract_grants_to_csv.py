@@ -485,6 +485,7 @@ def validate_enum_array(values: List[str], valid_values: List[str], field_name: 
         "PHARMACEUTICAL": "HEALTH",
         "LIFE SCIENCES": "HEALTH",
         "LIFE_SCIENCES": "HEALTH",
+        "HEALTH SCIENCES": "HEALTH",
         # Technology/Digital
         "ARTIFICIAL INTELLIGENCE": "TECHNOLOGY",
         "MACHINE LEARNING": "TECHNOLOGY",
@@ -496,13 +497,17 @@ def validate_enum_array(values: List[str], valid_values: List[str], field_name: 
         "IT": "TECHNOLOGY",
         "INFORMATION TECHNOLOGY": "TECHNOLOGY",
         "INFORMATION_TECHNOLOGY": "TECHNOLOGY",
+        "INFORMATION AND COMMUNICATIONS TECHNOLOGY (ICT)": "TECHNOLOGY",
+        "ICT": "TECHNOLOGY",
         "DIGITAL ECONOMY": "TECHNOLOGY",
+        "DIGITAL TECHNOLOGIES": "TECHNOLOGY",
         "DEEP TECH": "TECHNOLOGY",
         "INNOVATION": "TECHNOLOGY",
         "CLIMATE TECH": "ENERGY",
         # Energy/CleanTech
         "CLEANTECH": "ENERGY",
         "CLEAN TECHNOLOGY": "ENERGY",
+        "CLEAN GROWTH": "ENERGY",
         # Agriculture/Food
         "AGTECH": "AGRICULTURE",
         "AGRI-FOOD": "AGRICULTURE",
@@ -524,18 +529,31 @@ def validate_enum_array(values: List[str], valid_values: List[str], field_name: 
         "COMMUNITY ARTS": "CREATIVE",
         "CREATIVE INDUSTRIES": "CREATIVE",
         "CREATIVE ARTS": "CREATIVE",
+        "CULTURAL INDUSTRIES": "CREATIVE",
         # Hospitality/Tourism
         "TOURISM": "HOSPITALITY",
         # Manufacturing/Materials
         "ADVANCED MATERIALS": "MANUFACTURING",
+        "ADVANCED MANUFACTURING": "MANUFACTURING",
+        "AUTOMOTIVE": "MANUFACTURING",
+        "AEROSPACE": "MANUFACTURING",
+        "STEEL": "MANUFACTURING",
+        # Transportation
+        "TRANSPORTATION": "TRANSPORTATION",
         # Science/Research/Academia
         "SCIENCE": "TECHNOLOGY",
         "ENGINEERING": "TECHNOLOGY",
         "SOCIAL SCIENCES": "SOCIAL_SERVICES",
         "HUMANITIES": "EDUCATION",
+        # Social Impact
+        "SOCIAL IMPACT": "SOCIAL_SERVICES",
         # Business/General
         "EXPORT-ORIENTED BUSINESSES": "OPEN_TO_ALL",
         "GENERAL BUSINESS INNOVATION": "OPEN_TO_ALL",
+        "GENERAL BUSINESS": "OPEN_TO_ALL",
+        "ECONOMIC DIVERSIFICATION": "OPEN_TO_ALL",
+        "OTHER PRIORITY SECTORS": "OPEN_TO_ALL",
+        "ALL_SECTORS": "OPEN_TO_ALL",
     }
     
     purpose_mappings = {
