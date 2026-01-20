@@ -68,7 +68,7 @@ Ambitious multi-stage pipeline design with Google Drive integration, automated s
 ```
 grant-extraction-pipeline/
 ├── README.md                          # This file
-├── semi-auto-sys/                     # V1 (archived design document)
+├── semi-auto-system/                     # V1 (archived design document)
 │   ├── DESIGN.md                      # Original pipeline design
 │   └── README.md
 ├── extract-to-csv/                    # V1.5 (legacy version)
@@ -184,4 +184,4 @@ Internal use only - GRANTED Platform
 ---
 
 **Last Updated**: January 2026  
-**Maintained By**: Grant Data Operations Team
+**Maintained By**: Grant Data Operations Manager

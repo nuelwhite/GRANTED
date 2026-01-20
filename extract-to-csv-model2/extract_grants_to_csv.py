@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 import time
 import random
 from google import genai
+import requests
+from bs4 import BeautifulSoup
 
 ## ---1. CONFIGURATION
 # LOAD ENVIRONMENT VARIABLES
@@ -161,7 +163,58 @@ VALID_GRANT_PURPOSE = [
 ]
 
 
-def build_prompt(url: str) -> str:
+def fetch_page_content(url: str) -> Optional[str]:
+    """
+    Fetch and extract clean text content from a webpage.
+    Returns cleaned text or None on failure.
+    """
+    try:
+        logging.info(f"Fetching page content from {url}")
+        
+        # Set headers to mimic a browser
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
+        
+        # Parse HTML
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Remove unwanted elements
+        for element in soup(['script', 'style', 'nav', 'footer', 'header', 'iframe', 'noscript']):
+            element.decompose()
+        
+        # Get main content - try to find main content area first
+        main_content = soup.find('main') or soup.find('article') or soup.find('div', class_=re.compile('content|main', re.I)) or soup.body
+        
+        if main_content:
+            text = main_content.get_text(separator='\n', strip=True)
+        else:
+            text = soup.get_text(separator='\n', strip=True)
+        
+        # Clean up the text
+        lines = [line.strip() for line in text.split('\n') if line.strip()]
+        clean_text = '\n'.join(lines)
+        
+        # Limit length to avoid token limits (keep first ~15000 characters)
+        if len(clean_text) > 15000:
+            clean_text = clean_text[:15000] + "\n\n[Content truncated due to length...]"
+            logging.warning(f"Page content truncated to 15000 characters for {url}")
+        
+        logging.info(f"Successfully fetched {len(clean_text)} characters from {url}")
+        return clean_text
+        
+    except requests.RequestException as e:
+        logging.error(f"Failed to fetch page content from {url}: {e}")
+        return None
+    except Exception as e:
+        logging.error(f"Error processing page content from {url}: {e}")
+        return None
+
+
+def build_prompt(url: str, page_content: str) -> str:
     schema_definition = """
 [
     {
@@ -344,9 +397,16 @@ def clean_json_string(text: str) -> str:
 def extract_from_gemini(url: str, retries: int = 3, backoff: float = 2.0) -> Optional[str]:
     """
     Handles the API call with retry/backoff.
+    First fetches actual page content, then sends to Gemini for extraction.
     Returns raw JSON text or None on failure.
     """
-    prompt = build_prompt(url)
+    # First, fetch the actual page content
+    page_content = fetch_page_content(url)
+    if not page_content:
+        logging.error(f"Could not fetch page content from {url}, skipping extraction")
+        return None
+    
+    prompt = build_prompt(url, page_content)
     
     for attempt in range(1, retries + 1):
         try:
@@ -358,7 +418,7 @@ def extract_from_gemini(url: str, retries: int = 3, backoff: float = 2.0) -> Opt
                 config=genai.types.GenerateContentConfig(
                     temperature=TEMPERATURE,
                     max_output_tokens=MAX_TOKENS,
-                    # Removed tools - let Gemini read the URL directly for cleaner JSON output
+                    # No tools - using actual page content instead
                 ),
             )
             
@@ -579,20 +639,28 @@ def validate_enum_array(values: List[str], valid_values: List[str], field_name: 
         "BUSINESS DEVELOPMENT": "OPERATIONAL",
         "PRODUCTIVITY IMPROVEMENT": "OPERATIONAL",
         "ECONOMIC DEVELOPMENT": "OPERATIONAL",
+        "ECONOMIC_DEVELOPMENT": "OPERATIONAL",
+        "VENTURE CREATION": "OPERATIONAL",
+        "STARTUP FUNDING": "CAPITAL",
         # Expansion & Scaling
         "PILOT_PROJECTS": "RESEARCH",
         "SCALING_UP": "PROGRAM_EXPANSION",
         "SCALE_UP": "PROGRAM_EXPANSION",
         "EXPANSION": "PROGRAM_EXPANSION",
+        "BUSINESS_EXPANSION": "PROGRAM_EXPANSION",
         "MARKET_EXPANSION": "MARKETING",
         "MARKET EXPANSION": "MARKETING",
         "MARKET ENTRY & EXPANSION": "MARKETING",
+        "MARKET ENTRY": "MARKETING",
         "EXPORT_DEVELOPMENT": "MARKETING",
+        "EXPORT DEVELOPMENT": "MARKETING",
         # Capacity & Training
         "HEALTH_SYSTEM_IMPROVEMENT": "CAPACITY_BUILDING",
         "CAPACITY BUILDING": "CAPACITY_BUILDING",
         "CAPACITY_BUILDING": "CAPACITY_BUILDING",
         "PROFESSIONAL DEVELOPMENT": "TRAINING",
+        "TALENT DEVELOPMENT": "TRAINING",
+        "TRAINING_AND_SKILLS_DEVELOPMENT": "TRAINING",
         # Technology & Digital
         "TECHNOLOGY_ADOPTION": "TECHNOLOGY",
         "TECH_ADOPTION": "TECHNOLOGY",
@@ -606,6 +674,10 @@ def validate_enum_array(values: List[str], valid_values: List[str], field_name: 
         "COMMUNITY DEVELOPMENT": "COMMUNITY_ENGAGEMENT",
         # Job Creation
         "JOB CREATION": "HIRING",
+        "JOB_CREATION": "HIRING",
+        # Economic Growth
+        "ECONOMIC GROWTH": "OPERATIONAL",
+        "GLOBAL COMPETITIVENESS": "OPERATIONAL",
     }
     
     equity_mappings = {
